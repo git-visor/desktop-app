@@ -35,7 +35,6 @@ export function ObjectDetail({
     return allObjects.find((o) => o.hash === hash)
   }
 
-  // 3. Helper to toggle diff visibility (Local state only)
   const toggleFileDiff = (filePath: string): void => {
     const newExpanded = new Set(expandedFiles)
     if (newExpanded.has(filePath)) {
@@ -46,7 +45,6 @@ export function ObjectDetail({
     setExpandedFiles(newExpanded)
   }
 
-  // 4. Helper to render diff lines with colors
   const renderDiffContent = (diff: string): JSX.Element | null => {
     if (!diff) return null
     return (
@@ -182,7 +180,6 @@ export function ObjectDetail({
               <span className="text-xs text-gray-400">Changed Files ({commit.diff.length})</span>
             </div>
             <div className="bg-[#252526] rounded p-3 max-h-[400px] overflow-y-auto"> 
-            {/* Increased max-height to accommodate diffs */}
               {commit.diff.length > 0 ? (
                 <div className="space-y-2">
                   {commit.diff.map((change, idx) => {
@@ -190,6 +187,7 @@ export function ObjectDetail({
                     
                     return (
                       <div key={idx} className="flex flex-col">
+                        {/* File Change Area */}
                         <div className="flex items-center gap-2">
                            <button 
                              onClick={() => toggleFileDiff(change.path)}
