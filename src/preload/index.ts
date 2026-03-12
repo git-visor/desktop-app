@@ -6,8 +6,6 @@ const api = {
   getGitObjects: (path: string) => ipcRenderer.invoke('git:get-objects', path),
   getGitHead: (path: string) => ipcRenderer.invoke('git:get-head', path),
   selectDirectory: () => ipcRenderer.invoke('dialog:openDirectory'),
-  // getCommitDiff: (repoPath: string, commitHash: string, filePath: string) =>
-  //   ipcRenderer.invoke('git:get-commit-diff', repoPath, commitHash, filePath)
 }
 
 // Use `contextBridge` APIs to expose Electron APIs to

@@ -33,11 +33,6 @@ declare global {
         }>
       >
       selectDirectory: () => Promise<string | null>
-      // getCommitDiff: (
-      //   repoPath: string,
-      //   commitHash: string,
-      //   filePath: string
-      // ) => Promise<string | null>
     }
   }
 }
