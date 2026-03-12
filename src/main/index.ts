@@ -111,13 +111,30 @@ function parseCommitContent(content: string): {
   }
 }
 
+async function getCommitDiff(repoPath: string, commitHash: string, filePath: string): Promise<string | null> {
+  try {
+    // git show --format="" --patch <commit> -- <path> gets the isolated diff for a file
+    const { stdout } = await execAsync(
+      `git show --format="" -U0 --patch ${commitHash} -- "${filePath}"`,
+      { cwd: repoPath }
+    )
+    return stdout
+  } catch (error) {
+    console.warn('Failed to get diff:', error)
+    return null
+  }
+}
+
 // IPC Handler to load repository data
 ipcMain.handle('git:get-objects', async (_event, repoPath: string) => {
   const objectsPath = join(repoPath, '.git', 'objects')
   const tagsPath = join(repoPath, '.git', 'refs', 'tags')
   const rootFolderName = repoPath.split(/[\\/]/).pop() || 'repository'
   // map to store diffs for commits: commitHash -> FileChange[]
-  const commitDiffMap = new Map<string, { status: string; path: string; hash: string }[]>()
+  const commitDiffMap = new Map<string, { status: string; path: string; hash: string; content: string }[]>()
+  
+  const diffContentPromises: Promise<void>[] = []
+
   try {
     // Execute git log to get all file changes for all commits
     // Format: "COMMIT:<HASH>" followed by raw diff lines
@@ -149,7 +166,6 @@ ipcMain.handle('git:get-objects', async (_event, repoPath: string) => {
           // metaArr usually: [':oldmode', 'newmode', 'oldsha', 'newsha', 'status']
           if (metaArr.length >= 5) {
             const newSha = metaArr[3]
-            console.log(newSha)
             const rawStatus = metaArr[4]
             // Normalize status to its leading letter (e.g. R100 -> R) while preserving semantics
             const status = rawStatus.charAt(0)
@@ -168,7 +184,17 @@ ipcMain.handle('git:get-objects', async (_event, repoPath: string) => {
             // For deletions, newSha is 0000...; we still record the diff but consumers can ignore hash if needed.
             const diffs = commitDiffMap.get(currentCommitHash)
             if (diffs && path) {
-              diffs.push({ status, path, hash: newSha })
+              const diffEntry = { status, path, hash: newSha, content: '' }
+              diffs.push(diffEntry)
+
+              const promise = getCommitDiff(repoPath, currentCommitHash, path)
+                .then((content) => {
+                  if (content) {
+                    diffEntry.content = content
+                  }
+                })
+                .catch((err) => console.warn(`Failed to fetch diff for ${path}:`, err))
+              diffContentPromises.push(promise)
             }
           }
         }
@@ -178,6 +204,7 @@ ipcMain.handle('git:get-objects', async (_event, repoPath: string) => {
     console.warn('Failed to load commit diffs via git cli:', error)
     // Continue without diffs if git command fails (e.g. empty repo)
   }
+  await Promise.all(diffContentPromises)
   if (!fs.existsSync(objectsPath)) {
     throw new Error('No .git/objects found')
   }
