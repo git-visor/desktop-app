@@ -33,6 +33,8 @@ declare global {
         }>
       >
       selectDirectory: () => Promise<string | null>
+      getCommitDiff: (repoPath: string, commitHash: string, filePath: string) => Promise<string | null>
+      getBatchCommitDiffs: (repoPath: string, requests: { commitHash: string; filePath: string }[]) => Promise<{ commitHash: string; filePath: string; content: string | null }[]>
     }
   }
 }

@@ -1,5 +1,5 @@
 import { app, shell, BrowserWindow, ipcMain, dialog } from 'electron'
-import { exec } from 'child_process'
+import { exec, execFile } from 'child_process'
 import { promisify } from 'util'
 import { join } from 'path'
 import * as fs from 'fs'
@@ -8,6 +8,22 @@ import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 
 const execAsync = promisify(exec)
+const execFileAsync = promisify(execFile)
+
+async function processWithConcurrencyLimit<T>(
+  items: T[], 
+  limit: number, 
+  task: (item: T) => Promise<void>
+): Promise<void> {
+  const queue = [...items];
+  const workers = Array(Math.min(limit, items.length)).fill(null).map(async () => {
+    while (queue.length > 0) {
+      const item = queue.shift();
+      if (item) await task(item);
+    }
+  });
+  await Promise.all(workers);
+}
 
 function createWindow(): void {
   // Create the browser window.
@@ -114,9 +130,13 @@ function parseCommitContent(content: string): {
 async function getCommitDiff(repoPath: string, commitHash: string, filePath: string): Promise<string | null> {
   try {
     // git show --format="" --patch <commit> -- <path> gets the isolated diff for a file
-    const { stdout } = await execAsync(
-      `git show --format="" -U0 --patch ${commitHash} -- "${filePath}"`,
-      { cwd: repoPath }
+    const { stdout } = await execFileAsync(
+      'git',
+      ['show', '--format=', '-U0', '--patch', commitHash, '--', filePath],
+      { 
+        cwd: repoPath, 
+        maxBuffer: 50 * 1024 * 1024
+      }
     )
     return stdout
   } catch (error) {
@@ -124,6 +144,26 @@ async function getCommitDiff(repoPath: string, commitHash: string, filePath: str
     return null
   }
 }
+
+ipcMain.handle('git:get-commit-diff', async (_event, repoPath: string, commitHash: string, filePath: string) => {
+  return await getCommitDiff(repoPath, commitHash, filePath)
+})
+
+ipcMain.handle('git:get-batch-commit-diffs', async (_event, repoPath: string, requests: { commitHash: string; filePath: string }[]) => {
+  const results: { commitHash: string; filePath: string; content: string | null }[] = []
+  
+  await processWithConcurrencyLimit(requests, 10, async (req) => {
+    try {
+      const content = await getCommitDiff(repoPath, req.commitHash, req.filePath)
+      results.push({ ...req, content })
+    } catch (err) {
+      console.error(`Failed to fetch diff for ${req.filePath} in ${req.commitHash}:`, err)
+      results.push({ ...req, content: null })
+    }
+  })
+  
+  return results
+})
 
 // IPC Handler to load repository data
 ipcMain.handle('git:get-objects', async (_event, repoPath: string) => {
@@ -133,7 +173,8 @@ ipcMain.handle('git:get-objects', async (_event, repoPath: string) => {
   // map to store diffs for commits: commitHash -> FileChange[]
   const commitDiffMap = new Map<string, { status: string; path: string; hash: string; content: string }[]>()
   
-  const diffContentPromises: Promise<void>[] = []
+  // const diffContentPromises: Promise<void>[] = []
+  // const diffTasks: { commitHash: string; path: string; diffEntry: { content: string } }[] = []
 
   try {
     // Execute git log to get all file changes for all commits
@@ -187,14 +228,14 @@ ipcMain.handle('git:get-objects', async (_event, repoPath: string) => {
               const diffEntry = { status, path, hash: newSha, content: '' }
               diffs.push(diffEntry)
 
-              const promise = getCommitDiff(repoPath, currentCommitHash, path)
-                .then((content) => {
-                  if (content) {
-                    diffEntry.content = content
-                  }
-                })
-                .catch((err) => console.warn(`Failed to fetch diff for ${path}:`, err))
-              diffContentPromises.push(promise)
+              // const promise = getCommitDiff(repoPath, currentCommitHash, path)
+              //   .then((content) => {
+              //     if (content) {
+              //       diffEntry.content = content
+              //     }
+              //   })
+              //   .catch((err) => console.warn(`Failed to fetch diff for ${path}:`, err))
+              // diffContentPromises.push(promise)
             }
           }
         }
@@ -204,7 +245,16 @@ ipcMain.handle('git:get-objects', async (_event, repoPath: string) => {
     console.warn('Failed to load commit diffs via git cli:', error)
     // Continue without diffs if git command fails (e.g. empty repo)
   }
-  await Promise.all(diffContentPromises)
+  // await processWithConcurrencyLimit(diffTasks, 5, async ({ commitHash, path, diffEntry }) => {
+  //   try {
+  //     const content = await getCommitDiff(repoPath, commitHash, path)
+  //     if (content) {
+  //       diffEntry.content = content
+  //     }
+  //   } catch (err) {
+  //     console.warn(`Failed to fetch diff for ${path}:`, err)
+  //   }
+  // })
   if (!fs.existsSync(objectsPath)) {
     throw new Error('No .git/objects found')
   }
@@ -222,7 +272,7 @@ ipcMain.handle('git:get-objects', async (_event, repoPath: string) => {
     entries?: { mode: string; name: string; hash: string; type: string }[]
     tree?: string
     parent?: string[]
-    diff?: { status: string; path: string; hash: string }[]
+    diff?: { status: string; path: string; hash: string; content: string }[]
   }[] = []
 
   // 1. Scan for loose object files (folders 00-ff)

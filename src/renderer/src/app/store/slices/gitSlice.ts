@@ -87,7 +87,17 @@ const gitSlice = createSlice({
     },
     loadMoreObjects: (state) => {
       state.displayLimit += 50
-    }
+    },
+    updateCommitDiffContent: (state, action: PayloadAction<{ commitHash: string; filePath: string; content: string }>) => {
+      const { commitHash, filePath, content } = action.payload
+      const commit = state.objects.find((obj) => obj.type === 'commit' && obj.hash === commitHash) as CommitObject | undefined
+      if (commit && commit.diff) {
+        const diffEntry = commit.diff.find((d) => d.path === filePath)
+        if (diffEntry) {
+          diffEntry.content = content
+        }
+      }
+    },
   }
 })
 
@@ -101,7 +111,8 @@ export const {
   closeRepository,
   setObjects,
   setHeadPointer,
-  setIsRefreshing
+  setIsRefreshing,
+  updateCommitDiffContent
 } = gitSlice.actions
 
 export default gitSlice.reducer

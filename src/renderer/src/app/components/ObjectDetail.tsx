@@ -14,6 +14,8 @@ import {
 import type { GitObject, CommitObject, TreeObject, BlobObject, TagObject } from './ObjectDatabase'
 import type { JSX } from 'react'
 import { useState } from 'react'
+import { useAppDispatch, useAppSelector } from '@renderer/app/store/hooks'
+import { updateCommitDiffContent } from '@renderer/app/store/slices/gitSlice'
 
 interface ObjectDetailProps {
   object: GitObject | CommitObject | TreeObject | BlobObject | TagObject
@@ -28,6 +30,8 @@ export function ObjectDetail({
 }: ObjectDetailProps): JSX.Element {
 
   const [expandedFiles, setExpandedFiles] = useState<Set<string>>(new Set())
+  const dispatch = useAppDispatch()
+  const repoPath = useAppSelector((state) => state.git.repoPath)
 
   const getObjectByHash = (
     hash: string
@@ -35,14 +39,37 @@ export function ObjectDetail({
     return allObjects.find((o) => o.hash === hash)
   }
 
-  const toggleFileDiff = (filePath: string): void => {
-    const newExpanded = new Set(expandedFiles)
-    if (newExpanded.has(filePath)) {
-      newExpanded.delete(filePath)
-    } else {
-      newExpanded.add(filePath)
+  const toggleFileDiff = async (filePath: string): Promise<void> => { // Make async
+    // Check if we need to fetch content
+    if (object.type === 'commit' && repoPath) {
+      const commit = object as CommitObject
+      const diffEntry = commit.diff?.find((d) => d.path === filePath)
+      
+      if (diffEntry && !diffEntry.content) {
+        try {
+          const content = await window.api.getCommitDiff(repoPath, commit.hash, filePath)
+          if (content) {
+             dispatch(updateCommitDiffContent({ 
+               commitHash: commit.hash, 
+               filePath, 
+               content 
+             }))
+          }
+        } catch (err) {
+          console.error('Failed to fetch diff:', err)
+        }
+      }
     }
-    setExpandedFiles(newExpanded)
+
+    setExpandedFiles((prev) => {
+      const newExpanded = new Set(prev)
+      if (newExpanded.has(filePath)) {
+        newExpanded.delete(filePath)
+      } else {
+        newExpanded.add(filePath)
+      }
+      return newExpanded
+    })
   }
 
   const renderDiffContent = (diff: string): JSX.Element | null => {
@@ -198,7 +225,6 @@ export function ObjectDetail({
 
                            <button 
                               onClick={() => {
-                                 // keeps existing blob navigation functionality
                                  if(change.hash && !change.hash.match(/^0+$/)) onSelectObject(change.hash)
                               }}
                               className="flex-1 flex items-center gap-2 p-2 bg-yellow-500/10 hover:bg-yellow-500/20 border border-yellow-500/30 rounded transition-colors"
