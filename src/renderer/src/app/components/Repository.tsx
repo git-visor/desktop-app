@@ -14,7 +14,6 @@ import {
   FolderOpen,
   HardDrive,
   Clock,
-  GitBranch,
   GitCommit,
   AlertCircle,
   Loader2,
@@ -196,6 +195,14 @@ export function Repository(): React.JSX.Element {
 
   const commitCount = objects.filter((o) => o.type === 'commit').length
 
+  const lastCommit = objects
+    .filter((o) => o.type === 'commit')
+    .sort((a, b) => {
+      const aCommit = a as CommitObject
+      const bCommit = b as CommitObject
+      return bCommit.timestamp - aCommit.timestamp
+    })[0] as CommitObject | undefined
+
   if (!isRepoLoaded) {
     return (
       <div className="h-full flex flex-col items-center justify-center bg-[#1e1e1e] p-8 text-center">
@@ -229,7 +236,7 @@ export function Repository(): React.JSX.Element {
             {isLoading ? 'Reading .git folder...' : 'Browse Folders'}
           </button>
 
-          <div className="mt-6 pt-6 border-t border-gray-700 text-left">
+          {/* <div className="mt-6 pt-6 border-t border-gray-700 text-left">
             <p className="text-[10px] text-gray-500 uppercase tracking-wider font-semibold mb-3">
               Recent
             </p>
@@ -244,7 +251,7 @@ export function Repository(): React.JSX.Element {
                 </div>
               </div>
             </div>
-          </div>
+          </div> */}
         </div>
       </div>
     )
@@ -326,7 +333,7 @@ export function Repository(): React.JSX.Element {
           <p className="text-2xl font-bold text-white pl-1">{commitCount}</p>
         </div>
 
-        <div className="bg-[#252526] p-4 rounded border border-gray-700">
+        {/* <div className="bg-[#252526] p-4 rounded border border-gray-700">
           <div className="flex items-center gap-3 mb-2">
             <div className="p-2 bg-purple-500/10 rounded">
               <GitBranch className="w-5 h-5 text-purple-400" />
@@ -334,16 +341,18 @@ export function Repository(): React.JSX.Element {
             <span className="text-gray-400 text-sm">Branches</span>
           </div>
           <p className="text-2xl font-bold text-white pl-1">3</p>
-        </div>
+        </div> */}
 
         <div className="bg-[#252526] p-4 rounded border border-gray-700">
           <div className="flex items-center gap-3 mb-2">
             <div className="p-2 bg-orange-500/10 rounded">
               <Clock className="w-5 h-5 text-orange-400" />
             </div>
-            <span className="text-gray-400 text-sm">Last Modified</span>
+            <span className="text-gray-400 text-sm">Last Commit</span>
           </div>
-          <p className="text-lg font-medium text-white pl-1 mt-1">Just now</p>
+          <p className="text-lg font-medium text-white pl-1 mt-1">
+            {lastCommit ? new Date(lastCommit.timestamp).toLocaleString() : 'No commits'}
+          </p>
         </div>
       </div>
 

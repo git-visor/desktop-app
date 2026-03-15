@@ -59,7 +59,8 @@ jobs:
 
       - name: Build for macOS
         if: matrix.os == 'macos-latest'
-        # Note: This will produce an unsigned .dmg unless you add code signing secrets
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
         run: npm run build:mac
 
       # Upload the built artifacts (exe, dmg, AppImage) to the GitHub Action Run page

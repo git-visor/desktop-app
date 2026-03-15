@@ -108,11 +108,13 @@ function parseCommitContent(content: string): {
   parent: string[]
   author?: string
   committer?: string
+  timestamp: number
   message: string
 } {
   const lines = content.split('\n')
-  const metadata: { tree?: string; parent: string[]; author?: string; committer?: string } = {
-    parent: []
+  const metadata: { tree?: string; parent: string[]; author?: string; committer?: string; timestamp: number } = {
+    parent: [],
+    timestamp: 0
   }
   let messageStart = 0
 
@@ -127,8 +129,22 @@ function parseCommitContent(content: string): {
 
     if (key === 'tree') metadata.tree = value
     else if (key === 'parent') metadata.parent.push(value)
-    else if (key === 'author') metadata.author = value
-    else if (key === 'committer') metadata.committer = value
+    else if (key === 'author') {
+      const authorParts = value.split(' ')
+      authorParts.pop() // timezone
+      const timestampToken = authorParts.pop() // second last part is Unix timestamp (seconds since epoch)
+      const timestampNumber = Number(timestampToken)
+      if (Number.isFinite(timestampNumber)) {
+        metadata.timestamp = timestampNumber * 1000 // convert to ms
+      }
+      metadata.author = authorParts.join(' ')
+    }
+    else if (key === 'committer') {
+      const committerParts = value.split(' ')
+      committerParts.pop()
+      committerParts.pop()
+      metadata.committer = committerParts.join(' ')
+    }
   }
 
   return {
@@ -367,9 +383,9 @@ ipcMain.handle('git:get-objects', async (_event, repoPath: string) => {
             size,
             references,
             referencedBy: [], // Will fill later
-            diff: type === 'commit' ? (commitDiffMap.get(fullHash) || []) : undefined, 
-            ...parsedContent
-          })
+            ...parsedContent,
+            ...(type === 'commit' ? { diff: commitDiffMap.get(fullHash) || [] } : {})
+            })
         } catch (err) {
           console.warn(`Failed to parse object ${fullHash}`, err)
         }

@@ -23,7 +23,7 @@ export interface GitState {
 const initialState: GitState = {
   selectedObject: null,
   view: 'list',
-  showGuide: false,
+  showGuide: false, // Might change to true in the future if needed
   objects: [],
   visibleTypes: ['commit', 'tree', 'blob', 'tag'],
   displayLimit: 50,
