@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useMemo} from 'react'
+import { useEffect, useRef, useState, useMemo } from 'react'
 import type { JSX } from 'react'
 import type { GitObject, CommitObject, BlobObject, TreeObject, TagObject } from './ObjectDatabase'
 
@@ -84,10 +84,10 @@ export function ObjectGraph({
       if (!depthMap.has(hash)) {
         depthMap.set(hash, depth)
       }
-      
+
       const obj = objectMap.get(hash)
       if (obj && obj.type === 'tree') {
-        ;(obj as TreeObject).entries.forEach((entry) => {
+        ; (obj as TreeObject).entries.forEach((entry) => {
           queue.push({ hash: entry.hash, depth: depth + 1 })
         })
       }
@@ -156,10 +156,10 @@ export function ObjectGraph({
           baseY = targetPos.y
           // If multiple tags point to same object, we might overlap. 
           // For simplicity, let's just place it at fixed offset left.
-          baseX = targetPos.x - 80 
+          baseX = targetPos.x - 80
         }
       }
-      
+
       positionMap.set(tag.hash, {
         x: baseX,
         y: baseY,
@@ -174,15 +174,15 @@ export function ObjectGraph({
   }, [objects])
   const nodePositions = useMemo(() => {
     const merged = new Map(defaultPositions)
-    
+
     // Create a set of valid hashes for quick lookup
     const validHashes = new Set(defaultPositions.keys())
 
     dragOverrides.forEach((pos, hash) => {
-        // Only apply override if the object exists in the current dataset
-        if (validHashes.has(hash)) {
-            merged.set(hash, pos)
-        }
+      // Only apply override if the object exists in the current dataset
+      if (validHashes.has(hash)) {
+        merged.set(hash, pos)
+      }
     })
     return merged
   }, [defaultPositions, dragOverrides])
@@ -340,7 +340,7 @@ export function ObjectGraph({
           }
         })
       })
-    
+
     // Tag -> Target Object
     objects
       .filter((o) => o.type === 'tag')
@@ -390,7 +390,7 @@ export function ObjectGraph({
     nodePositions.forEach((pos) => {
       // Find the specific color for this node type
       let typeColor = '#a16207' // default yellow
-      
+
       if (pos.type === 'commit') {
         typeColor = '#60a5fa' // blue-400
       } else if (pos.type === 'tree') {
@@ -407,10 +407,10 @@ export function ObjectGraph({
       ctx.arc(pos.x, pos.y, NODE_RADIUS, 0, Math.PI * 2)
 
       // Make background transparent (or very dark gray for hit area visibility)
-      ctx.fillStyle = isSelected ? 'rgb(50, 50, 50)' : 'rgb(30, 30, 30)' 
+      ctx.fillStyle = isSelected ? 'rgb(50, 50, 50)' : 'rgb(30, 30, 30)'
       // Use the type color for the ring if selected, otherwise a subtle grey
-      ctx.strokeStyle = isSelected ? '#ffffff' : '#4b5563' 
-      
+      ctx.strokeStyle = isSelected ? '#ffffff' : '#4b5563'
+
       ctx.fill()
 
       if (isSelected) {
@@ -438,7 +438,7 @@ export function ObjectGraph({
       // We can also scale it down slightly if needed (e.g. 0.8x for 19px icon)
       const scale = ICON_SCALE * (NODE_RADIUS * 2) / 24 // Scale to fit node size
       ctx.scale(scale, scale)
-      ctx.translate(-12, -12) 
+      ctx.translate(-12, -12)
 
       ctx.lineWidth = 2
       // Icon color (light/white for contrast)
@@ -504,7 +504,7 @@ export function ObjectGraph({
   const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>): void => {
     const dx = e.clientX - lastMousePos.x
     const dy = e.clientY - lastMousePos.y
-    
+
     // Track if strict click or drag occurred
     if (Math.abs(dx) > 1 || Math.abs(dy) > 1) {
       hasMovedRef.current = true
@@ -516,7 +516,7 @@ export function ObjectGraph({
       setDragOverrides((prev) => {
         const next = new Map(prev)
         const currentPos = nodePositions.get(draggedNodeHash)
-        
+
         if (currentPos) {
           next.set(draggedNodeHash, {
             ...currentPos,
@@ -544,8 +544,8 @@ export function ObjectGraph({
 
   const handleClick = (e: React.MouseEvent<HTMLCanvasElement>): void => {
     // If we dragged (either panned widely or moved a node), don't trigger select
-    if (hasMovedRef.current) return 
-    
+    if (hasMovedRef.current) return
+
     // ...existing code for hit testing (finding foundHash)...
     // Copy the existing hit logic here
     const canvas = canvasRef.current
@@ -556,12 +556,12 @@ export function ObjectGraph({
 
     let foundHash: string | undefined
     for (const [hash, pos] of nodePositions.entries()) {
-        const dx = clickX - pos.x
-        const dy = clickY - pos.y
-        if (Math.sqrt(dx * dx + dy * dy) <= NODE_RADIUS) {
-            foundHash = hash
-            break
-        }
+      const dx = clickX - pos.x
+      const dy = clickY - pos.y
+      if (Math.sqrt(dx * dx + dy * dy) <= NODE_RADIUS) {
+        foundHash = hash
+        break
+      }
     }
 
     if (foundHash) {

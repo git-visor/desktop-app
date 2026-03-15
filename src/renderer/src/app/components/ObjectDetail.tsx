@@ -141,7 +141,7 @@ export function ObjectDetail({
               <Calendar className="w-4 h-4 text-gray-400" />
               <span className="text-xs text-gray-400">Timestamp</span>
             </div>
-            <p className="text-sm text-gray-300">{commit.timestamp}</p>
+            <p className="text-sm text-gray-300">{new Date(commit.timestamp).toLocaleString()}</p>
           </div>
 
           <div>

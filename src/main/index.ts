@@ -108,10 +108,11 @@ function parseCommitContent(content: string): {
   parent: string[]
   author?: string
   committer?: string
+  timestamp?: number
   message: string
 } {
   const lines = content.split('\n')
-  const metadata: { tree?: string; parent: string[]; author?: string; committer?: string } = {
+  const metadata: { tree?: string; parent: string[]; author?: string; committer?: string; timestamp?: number } = {
     parent: []
   }
   let messageStart = 0
@@ -127,8 +128,19 @@ function parseCommitContent(content: string): {
 
     if (key === 'tree') metadata.tree = value
     else if (key === 'parent') metadata.parent.push(value)
-    else if (key === 'author') metadata.author = value
-    else if (key === 'committer') metadata.committer = value
+    else if (key === 'author') {
+      const authorParts = value.split(' ')
+      authorParts.pop() // last part is timestamp
+      const timestamp = authorParts.pop() // second last part is timezone
+      metadata.timestamp = parseInt(timestamp || '0') * 1000 // convert to ms
+      metadata.author = authorParts.join(' ') // rest is author name/email
+    }
+    else if (key === 'committer') {
+      const committerParts = value.split(' ')
+      committerParts.pop()
+      committerParts.pop()
+      metadata.committer = committerParts.join(' ')
+    }
   }
 
   return {

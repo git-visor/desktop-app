@@ -1,19 +1,49 @@
 import {
   Database,
-  Package,
-  FileText,
+  Info,
+  Check,
   GitCommit,
   FolderTree,
-  ArrowRight,
-  Info,
-  Check
+  FileText,
+  Package,
 } from 'lucide-react'
 import { ObjectDetail } from './ObjectDetail'
 import { ObjectGraph } from './ObjectGraph'
+import { ObjectList } from './ObjectList'
 import { GitObjectsGuide } from './GitObjectsGuide'
 import { useAppDispatch, useAppSelector } from '@renderer/app/store/hooks'
 import { setSelectedObject, setView, toggleVisibleType } from '@renderer/app/store/slices/gitSlice'
 import { JSX, useMemo } from 'react'
+
+function getTypeColor(type: string): string {
+  switch (type) {
+    case 'commit':
+      return 'bg-blue-500/20 text-blue-300 border-blue-500/30'
+    case 'tree':
+      return 'bg-green-500/20 text-green-300 border-green-500/30'
+    case 'blob':
+      return 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30'
+    case 'tag':
+      return 'bg-purple-500/20 text-purple-300 border-purple-500/30'
+    default:
+      return 'bg-gray-500/20 text-gray-300 border-gray-500/30'
+  }
+}
+
+function getTypeIcon(type: string): React.JSX.Element {
+  switch (type) {
+    case 'commit':
+      return <GitCommit className="w-3 h-3 text-blue-400" />
+    case 'tree':
+      return <FolderTree className="w-3 h-3 text-green-400" />
+    case 'blob':
+      return <FileText className="w-3 h-3 text-yellow-400" />
+    case 'tag':
+      return <Package className="w-3 h-3 text-purple-400" />
+    default:
+      return <Database className="w-3 h-3 text-gray-400" />
+  }
+}
 
 export interface GitObject {
   hash: string
@@ -30,7 +60,8 @@ export interface CommitObject extends GitObject {
   parent?: string[]
   author: string
   message: string
-  timestamp: string
+  timestamp: number
+  committer?: string
   diff?: { status: string; path: string; hash: string; content: string | null}[]
 }
 
@@ -53,6 +84,7 @@ export interface BlobObject extends GitObject {
 
 export interface TagObject extends GitObject {
   type: 'tag'
+  name: string
   objectHash: string
 }
 
@@ -65,35 +97,6 @@ export function ObjectDatabase(): JSX.Element {
   const objects = useAppSelector((state) => state.git.objects)
   const visibleTypes = useAppSelector((state) => state.git.visibleTypes)
   const displayLimit = useAppSelector((state) => state.git.displayLimit)
-  const getTypeIcon = (type: string): React.JSX.Element => {
-    switch (type) {
-      case 'commit':
-        return <GitCommit className="w-3 h-3 text-blue-400" />
-      case 'tree':
-        return <FolderTree className="w-3 h-3 text-green-400" />
-      case 'blob':
-        return <FileText className="w-3 h-3 text-yellow-400" />
-      case 'tag':
-        return <Package className="w-3 h-3 text-purple-400" />
-      default:
-        return <Database className="w-3 h-3 text-gray-400" />
-    }
-  }
-
-  const getTypeColor = (type: string): string => {
-    switch (type) {
-      case 'commit':
-        return 'bg-blue-500/20 text-blue-300 border-blue-500/30'
-      case 'tree':
-        return 'bg-green-500/20 text-green-300 border-green-500/30'
-      case 'blob':
-        return 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30'
-      case 'tag':
-        return 'bg-purple-500/20 text-purple-300 border-purple-500/30'
-      default:
-        return 'bg-gray-500/20 text-gray-300 border-gray-500/30'
-    }
-  }
 
   const objectCounts = objects.reduce(
     (acc, obj) => {
@@ -190,79 +193,19 @@ export function ObjectDatabase(): JSX.Element {
               ))}
             </div>
           </div>
-
-          {/* <div className="grid grid-cols-2 gap-2">
-            <div className="bg-blue-500/10 border border-blue-500/20 rounded p-2">
-              <div className="flex items-center gap-1 mb-1">
-                <GitCommit className="w-3 h-3 text-blue-400" />
-                <span className="text-xs text-gray-400">Commits</span>
-              </div>
-              <span className="text-lg font-semibold text-blue-300">{objectCounts.commit || 0}</span>
-            </div>
-            
-            <div className="bg-green-500/10 border border-green-500/20 rounded p-2">
-              <div className="flex items-center gap-1 mb-1">
-                <FolderTree className="w-3 h-3 text-green-400" />
-                <span className="text-xs text-gray-400">Trees</span>
-              </div>
-              <span className="text-lg font-semibold text-green-300">{objectCounts.tree || 0}</span>
-            </div>
-            
-            <div className="bg-yellow-500/10 border border-yellow-500/20 rounded p-2">
-              <div className="flex items-center gap-1 mb-1">
-                <FileText className="w-3 h-3 text-yellow-400" />
-                <span className="text-xs text-gray-400">Blobs</span>
-              </div>
-              <span className="text-lg font-semibold text-yellow-300">{objectCounts.blob || 0}</span>
-            </div>
-            
-            <div className="bg-purple-500/10 border border-purple-500/20 rounded p-2">
-              <div className="flex items-center gap-1 mb-1">
-                <Package className="w-3 h-3 text-purple-400" />
-                <span className="text-xs text-gray-400">Tags</span>
-              </div>
-              <span className="text-lg font-semibold text-purple-300">{objectCounts.tag || 0}</span>
-            </div>
-          </div> */}
         </div>
-
         <div className="flex-1 relative">
           <div
             className={`absolute inset-0 ${view === 'list' ? 'overflow-auto p-4' : 'overflow-hidden p-0'}`}
           >
             {view === 'list' ? (
-              <div className="space-y-1">
-                {visibleListObjects.length > 0 ? (
-                  visibleListObjects.map((obj) => (
-                    <div
-                      key={obj.hash}
-                      onClick={() => dispatch(setSelectedObject(obj))}
-                      className={`flex items-center gap-2 p-2 rounded transition-colors cursor-pointer ${
-                        selectedObject?.hash === obj.hash
-                          ? 'bg-blue-500/20 border border-blue-500/30'
-                          : 'hover:bg-white/5'
-                      }`}
-                    >
-                      {getTypeIcon(obj.type)}
-                      <code className="text-xs text-gray-400 font-mono flex-1 truncate">
-                        {obj.hash}
-                      </code>
-                      <span
-                        className={`text-xs px-2 py-0.5 rounded border ${getTypeColor(obj.type)}`}
-                      >
-                        {obj.type}
-                      </span>
-                      {selectedObject?.hash === obj.hash && (
-                        <ArrowRight className="w-3 h-3 text-blue-400" />
-                      )}
-                    </div>
-                  ))
-                ) : (
-                  <div className="text-center text-gray-500 text-sm mt-10">
-                    No objects match the selected filters.
-                  </div>
-                )}
-              </div>
+              <ObjectList
+                objects={visibleListObjects}
+                selectedHash={selectedObject?.hash}
+                onSelectObject={(obj) => dispatch(setSelectedObject(obj))}
+                getTypeColor={getTypeColor}
+                getTypeIcon={getTypeIcon}
+              />
             ) : (
               <ObjectGraph
                 objects={filteredObjects}
@@ -276,7 +219,6 @@ export function ObjectDatabase(): JSX.Element {
           </div>
         </div>
       </div>
-
       <div className="flex-1 border-l border-gray-700 bg-[#1e1e1e] relative">
         <div className="absolute inset-0 overflow-auto">
           {selectedObject ? (
