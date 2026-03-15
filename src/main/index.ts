@@ -137,6 +137,7 @@ function parseCommitContent(content: string): {
       if (Number.isFinite(timestampNumber)) {
         metadata.timestamp = timestampNumber * 1000 // convert to ms
       }
+      metadata.author = authorParts.join(' ')
     }
     else if (key === 'committer') {
       const committerParts = value.split(' ')
@@ -382,9 +383,9 @@ ipcMain.handle('git:get-objects', async (_event, repoPath: string) => {
             size,
             references,
             referencedBy: [], // Will fill later
-            diff: type === 'commit' ? (commitDiffMap.get(fullHash) || []) : undefined, 
-            ...parsedContent
-          })
+            ...parsedContent,
+            ...(type === 'commit' ? { diff: commitDiffMap.get(fullHash) || [] } : {})
+            })
         } catch (err) {
           console.warn(`Failed to parse object ${fullHash}`, err)
         }
