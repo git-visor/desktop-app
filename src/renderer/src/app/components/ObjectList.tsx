@@ -1,5 +1,5 @@
 import { ArrowRight } from 'lucide-react'
-import { JSX } from 'react'
+import type { JSX } from 'react'
 import type { GitObject } from './ObjectDatabase'
 
 interface ObjectListProps {

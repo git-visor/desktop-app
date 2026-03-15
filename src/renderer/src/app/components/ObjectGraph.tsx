@@ -42,7 +42,7 @@ export function ObjectGraph({
   const NODE_TO_LABELS_GAP = 30 // Vertical gap between node and its label
   const COL_LABEL_SCALE = 0.7 // Scale for column header font size relative to node radius
   const LINE_WIDTH = 1.5 // Base line width for connections
-  const LUCID_ICON_SIZE = 24 // Base size for Lucide icons (used for hit detection and scaling)
+  const LUCIDE_ICON_SIZE = 24 // Base size for Lucide icons (used for hit detection and scaling)
   const ICON_SCALE = 0.7 // Scale for Lucide icons (1 = 24px, adjust if you want smaller/larger icons)
   const NODE_LABEL_SCALE = 0.6 // Scale for node labels relative to node radius
   const MAX_LABEL_LENGTH = 20 // Max characters for node labels before truncation
@@ -71,19 +71,43 @@ export function ObjectGraph({
         return a.hash.localeCompare(b.hash)
       })
 
+    const treeReachableCache = new Map<string, Set<string>>()
     const getReachableFromTree = (rootTreeHash: string): Set<string> => {
+      if (treeReachableCache.has(rootTreeHash)) {
+        return treeReachableCache.get(rootTreeHash)!
+      }
+      const cached = treeReachableCache.get(rootTreeHash)
+      if (cached) {
+        return cached
+      }
       const seen = new Set<string>()
       const queue: string[] = [rootTreeHash]
+      let i = 0
 
-      while (queue.length > 0) {
-        const current = queue.shift()
+      while (i < queue.length) {
+        const current = queue[i++]
         if (!current || seen.has(current)) continue
         seen.add(current)
 
         const obj = objectMap.get(current)
         if (obj?.type === 'tree') {
           const tree = obj as TreeObject
-          for (const entry of tree.entries) queue.push(entry.hash)
+          for (const entry of tree.entries) {
+            const childHash = entry.hash
+            const childObj = objectMap.get(childHash)
+            if (childObj?.type === 'tree') {
+              const childCached = treeReachableCache.get(childHash)
+              if (childCached) {
+                for (const h of childCached) {
+                  if (!seen.has(h)) {
+                    seen.add(h)
+                  }
+                }
+                continue
+              }
+            }
+            queue.push(childHash)
+          }
         }
       }
 
@@ -503,9 +527,9 @@ export function ObjectGraph({
       ctx.save()
       // Move to center of node
       ctx.translate(pos.x, pos.y)
-      const scale = ICON_SCALE * (NODE_RADIUS * 2) / LUCID_ICON_SIZE
+      const scale = ICON_SCALE * (NODE_RADIUS * 2) / LUCIDE_ICON_SIZE
       ctx.scale(scale, scale)
-      ctx.translate(-LUCID_ICON_SIZE / 2, -LUCID_ICON_SIZE / 2) // Center the icon
+      ctx.translate(-LUCIDE_ICON_SIZE / 2, -LUCIDE_ICON_SIZE / 2) // Center the icon
 
       ctx.lineWidth = 2
       // Icon color (light/white for contrast)

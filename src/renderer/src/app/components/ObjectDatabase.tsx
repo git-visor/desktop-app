@@ -13,7 +13,8 @@ import { ObjectList } from './ObjectList'
 import { GitObjectsGuide } from './GitObjectsGuide'
 import { useAppDispatch, useAppSelector } from '@renderer/app/store/hooks'
 import { setSelectedObject, setView, toggleVisibleType } from '@renderer/app/store/slices/gitSlice'
-import { JSX, useMemo } from 'react'
+import { useMemo } from 'react'
+import type { JSX } from 'react'
 
 function getTypeColor(type: string): string {
   switch (type) {
@@ -84,7 +85,6 @@ export interface BlobObject extends GitObject {
 
 export interface TagObject extends GitObject {
   type: 'tag'
-  name: string
   objectHash: string
 }
 
