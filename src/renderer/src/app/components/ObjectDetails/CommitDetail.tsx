@@ -11,7 +11,7 @@ import {
   ChevronDown,
   ChevronRight
 } from 'lucide-react'
-import type { GitObject, BlobObject, TreeObject, CommitObject, TagObject } from '../ObjectDatabase'
+import type { GitObject, BlobObject, TreeObject, CommitObject, TagObject } from '../ObjectTypes'
 import { useState } from 'react'
 import { useAppDispatch, useAppSelector } from '@renderer/app/store/hooks'
 import { updateCommitDiffContent } from '@renderer/app/store/slices/gitSlice'
