@@ -5,6 +5,7 @@ import { electronAPI } from '@electron-toolkit/preload'
 const api = {
   getGitObjects: (path: string) => ipcRenderer.invoke('git:get-objects', path),
   getGitHead: (path: string) => ipcRenderer.invoke('git:get-head', path),
+  getGitBranches: (path: string) => ipcRenderer.invoke('git:get-branches', path),
   selectDirectory: () => ipcRenderer.invoke('dialog:openDirectory'),
   getCommitDiff: (repoPath: string, commitHash: string, filePath: string) => ipcRenderer.invoke('git:get-commit-diff', repoPath, commitHash, filePath),
   getBatchCommitDiffs: (repoPath: string, requests: { commitHash: string; filePath: string }[]) =>

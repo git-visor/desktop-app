@@ -1,22 +1,16 @@
 import { GitBranch, Star, Check, Info } from 'lucide-react'
-import { useAppSelector } from '../store/hooks'
+import { useAppDispatch, useAppSelector } from '../store/hooks'
+import { setSelectedBranch } from '../store/slices/gitSlice'
 
-interface Branch {
+export interface BranchInfo {
   name: string
+  commitHash: string
   current: boolean
-  lastCommit: string
-  ahead: number
-  behind: number
 }
 
-const mockBranches: Branch[] = [
-  { name: 'main', current: true, lastCommit: 'a7f3c2e', ahead: 0, behind: 0 },
-  { name: 'feature/dark-mode', current: false, lastCommit: 'd9e1f4c', ahead: 1, behind: 1 },
-  { name: 'develop', current: false, lastCommit: 'b4e5d1a', ahead: 0, behind: 1 }
-]
-
 export function BranchPanel(): React.JSX.Element {
-  const { headPointer } = useAppSelector((state) => state.git)
+  const dispatch = useAppDispatch()
+  const { headPointer, branches, selectedBranch } = useAppSelector((state) => state.git)
   return (
     <div className="w-64 bg-[#252526] border-r border-[#1e1e1e] p-3 overflow-auto">
       <div className="flex items-center gap-2 mb-3 pb-2 border-b border-gray-700">
@@ -34,35 +28,33 @@ export function BranchPanel(): React.JSX.Element {
       </div>
 
       <div className="space-y-1">
-        {mockBranches.map((branch) => (
-          <div
-            key={branch.name}
-            className={`p-2 rounded cursor-pointer transition-colors ${
-              branch.current ? 'bg-blue-500/20 border border-blue-500/30' : 'hover:bg-white/5'
-            }`}
-          >
-            <div className="flex items-center gap-2 mb-1">
-              {branch.current && <Check className="w-3 h-3 text-green-400" />}
-              <span
-                className={`text-xs flex-1 ${
-                  branch.current ? 'text-blue-300 font-medium' : 'text-gray-300'
-                }`}
-              >
-                {branch.name}
-              </span>
-            </div>
-            <div className="flex items-center gap-2 text-xs text-gray-500 pl-5">
-              <code className="text-yellow-400">{branch.lastCommit}</code>
-              {(branch.ahead > 0 || branch.behind > 0) && (
-                <span className="text-xs">
-                  {branch.ahead > 0 && <span className="text-green-400">↑{branch.ahead}</span>}
-                  {branch.ahead > 0 && branch.behind > 0 && ' '}
-                  {branch.behind > 0 && <span className="text-red-400">↓{branch.behind}</span>}
+        {branches.map((branch) => {
+          const isSelected = selectedBranch === branch.name
+
+          return (
+            <div
+              key={branch.name}
+              onClick={() => dispatch(setSelectedBranch(branch.name))}
+              className={`p-2 rounded cursor-pointer transition-colors ${
+                isSelected ? 'bg-blue-500/20 border border-blue-500/30' : 'hover:bg-white/5'
+              }`}
+            >
+              <div className="flex items-center gap-2 mb-1">
+                {isSelected && <Check className="w-3 h-3 text-green-400" />}
+                <span
+                  className={`text-xs flex-1 ${
+                    isSelected ? 'text-blue-300 font-medium' : 'text-gray-300'
+                  }`}
+                >
+                  {branch.name}
                 </span>
-              )}
+              </div>
+              <div className="flex items-center gap-2 text-xs text-gray-500 pl-5">
+                <code className="text-yellow-400">{branch.commitHash.slice(0, 7)}</code>
+              </div>
             </div>
-          </div>
-        ))}
+          )
+        })}
       </div>
 
       <div className="mt-4 pt-3 border-t border-gray-700">

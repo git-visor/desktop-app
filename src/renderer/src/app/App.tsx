@@ -2,7 +2,7 @@ import { Provider } from 'react-redux'
 import { store } from './store/store'
 import { useAppDispatch, useAppSelector } from './store/hooks'
 import { setActiveTab } from './store/slices/appSlice'
-// import { BranchPanel } from './components/BranchPanel'
+import { BranchPanel } from './components/BranchPanel'
 import { CommitGraph } from './components/CommitGraph'
 import { FileChanges } from './components/FileChanges'
 import { ObjectDatabase } from './components/ObjectDatabase'
@@ -19,7 +19,7 @@ function AppContent(): React.JSX.Element {
   return (
     <div className="h-screen w-screen flex flex-col bg-[#1e1e1e] overflow-hidden">
       <div className="flex-1 flex overflow-hidden">
-        {/* <BranchPanel /> */}
+        <BranchPanel />
 
         <div className="flex-1 flex flex-col overflow-hidden">
           <Tabs

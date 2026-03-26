@@ -5,6 +5,7 @@ import {
   TreeObject,
   BlobObject
 } from '@renderer/app/components/ObjectDatabase'
+import { BranchInfo } from '@renderer/app/components/BranchPanel'
 
 export interface GitState {
   selectedObject: GitObject | CommitObject | TreeObject | BlobObject | null
@@ -18,6 +19,8 @@ export interface GitState {
   isRepoLoaded: boolean
   headPointer: string | null
   isRefreshing: boolean
+  branches: BranchInfo[]
+  selectedBranch: string | null
 }
 
 const initialState: GitState = {
@@ -31,7 +34,9 @@ const initialState: GitState = {
   repoName: null,
   isRepoLoaded: false,
   headPointer: null,
-  isRefreshing: false
+  isRefreshing: false,
+  branches: [],
+  selectedBranch: null
 }
 
 const gitSlice = createSlice({
@@ -62,6 +67,8 @@ const gitSlice = createSlice({
       // Optional: clear objects or reset view
       state.objects = []
       state.selectedObject = null
+      state.branches = []
+      state.selectedBranch = null
     },
     setSelectedObject: (
       state,
@@ -110,6 +117,17 @@ const gitSlice = createSlice({
         state.selectedObject = commit
       }
     },
+    setBranches: (state, action: PayloadAction<BranchInfo[]>) => {
+      state.branches = action.payload
+
+      // Keep selection valid and default to current branch
+      if (!state.selectedBranch || !action.payload.some((b) => b.name === state.selectedBranch)) {
+        state.selectedBranch = action.payload.find((b) => b.current)?.name ?? null
+      }
+    },
+    setSelectedBranch: (state, action: PayloadAction<string | null>) => {
+      state.selectedBranch = action.payload
+    }
   }
 })
 
@@ -124,7 +142,9 @@ export const {
   setObjects,
   setHeadPointer,
   setIsRefreshing,
-  updateCommitDiffContent
+  updateCommitDiffContent,
+  setBranches,
+  setSelectedBranch
 } = gitSlice.actions
 
 export default gitSlice.reducer

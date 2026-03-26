@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useAppDispatch, useAppSelector } from '@renderer/app/store/hooks'
-import { updateCommitDiffContent } from '@renderer/app/store/slices/gitSlice'
+import { setBranches, updateCommitDiffContent } from '@renderer/app/store/slices/gitSlice'
+import { BranchInfo } from '@renderer/app/components/BranchPanel'
 import { CommitObject } from '@renderer/app/components/ObjectDatabase'
 import {
   setRepository,
@@ -145,6 +146,20 @@ export function Repository(): React.JSX.Element {
       dispatch(setIsRefreshing(false))
     }
   }
+
+  const fetchBranchList = async (): Promise<BranchInfo[]> => {
+    if (!repoPath) return []
+    try {
+      const branches = await window.api.getGitBranches(repoPath)
+      dispatch(setBranches(branches))
+      return branches
+    } catch (error) {
+      console.error('Error fetching branches:', error)
+      return []
+    }
+  }
+
+  fetchBranchList()
 
   const handleSelectDirectory = async (): Promise<void> => {
     setError(null)
