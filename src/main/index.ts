@@ -4,6 +4,7 @@ import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/GitVisor-simple-transparent-bg-lg.ico?asset'
 import { registerGetHeadHandler } from './getHead'
 import { registerGetObjectsHandler } from './getObjects'
+import { registerGetBranchesHandler } from './getBranches'
 import { 
   registerGetCommitDiffHandler,
   registerGetBatchCommitDiffsHandler 
@@ -45,6 +46,7 @@ registerGetCommitDiffHandler()
 registerGetBatchCommitDiffsHandler()
 registerGetObjectsHandler()
 registerGetHeadHandler()
+registerGetBranchesHandler()
 
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.

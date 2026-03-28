@@ -1,5 +1,11 @@
 import { ElectronAPI } from '@electron-toolkit/preload'
 
+type BranchInfo = {
+  name: string
+  commitHash: string
+  current: boolean
+}
+
 declare global {
   interface Window {
     electron: ElectronAPI
@@ -35,6 +41,7 @@ declare global {
       selectDirectory: () => Promise<string | null>
       getCommitDiff: (repoPath: string, commitHash: string, filePath: string) => Promise<string | null>
       getBatchCommitDiffs: (repoPath: string, requests: { commitHash: string; filePath: string }[]) => Promise<{ commitHash: string; filePath: string; content: string | null }[]>
+      getGitBranches: (path: string) => Promise<BranchInfo[]>
     }
   }
 }

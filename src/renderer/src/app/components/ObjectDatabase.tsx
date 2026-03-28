@@ -7,6 +7,7 @@ import {
   FileText,
   Package,
 } from 'lucide-react'
+import type { CommitObject, TreeObject, TagObject } from './ObjectTypes'
 import { ObjectDetail } from './ObjectDetail'
 import { ObjectGraph } from './ObjectGraph'
 import { ObjectList } from './ObjectList'
@@ -46,48 +47,6 @@ function getTypeIcon(type: string): React.JSX.Element {
   }
 }
 
-export interface GitObject {
-  hash: string
-  type: 'commit' | 'tree' | 'blob' | 'tag'
-  size: number
-  content?: string
-  references?: string[]
-  referencedBy?: string[]
-}
-
-export interface CommitObject extends GitObject {
-  type: 'commit'
-  tree: string
-  parent?: string[]
-  author: string
-  message: string
-  timestamp: number
-  committer?: string
-  diff?: { status: string; path: string; hash: string; content: string | null}[]
-}
-
-export interface TreeObject extends GitObject {
-  type: 'tree'
-  names: string[]
-  entries: Array<{
-    mode: string
-    type: 'blob' | 'tree'
-    hash: string
-    name: string
-  }>
-}
-
-export interface BlobObject extends GitObject {
-  type: 'blob'
-  names: string[]
-  content: string
-}
-
-export interface TagObject extends GitObject {
-  type: 'tag'
-  objectHash: string
-}
-
 
 export function ObjectDatabase(): JSX.Element {
   const dispatch = useAppDispatch()
@@ -105,11 +64,70 @@ export function ObjectDatabase(): JSX.Element {
     },
     {} as Record<string, number>
   )
+  const branches = useAppSelector((state) => state.git.branches)
+  const selectedBranch = useAppSelector((state) => state.git.selectedBranch)
 
-  // derived filtered list
+  const branchScopedObjects = useMemo(() => {
+    if (!selectedBranch) return objects
+
+    const selected = branches.find((b) => b.name === selectedBranch)
+    if (!selected) return objects
+
+    const objectMap = new Map(objects.map((o) => [o.hash, o]))
+    const included = new Set<string>()
+
+    const includeTree = (rootTreeHash: string): void => {
+      const queue: string[] = [rootTreeHash]
+      let i = 0
+      while (i < queue.length) {
+        const hash = queue[i++]
+        if (!hash || included.has(hash)) continue
+        included.add(hash)
+
+        const obj = objectMap.get(hash)
+        if (obj?.type === 'tree') {
+          const tree = obj as TreeObject
+          for (const entry of tree.entries) {
+            queue.push(entry.hash)
+          }
+        }
+      }
+    }
+
+    // Walk commit ancestry from selected branch tip
+    const stack: string[] = [selected.commitHash]
+    while (stack.length > 0) {
+      const hash = stack.pop()
+      if (!hash || included.has(hash)) continue
+
+      const obj = objectMap.get(hash)
+      if (!obj || obj.type !== 'commit') continue
+
+      const commit = obj as CommitObject
+      included.add(commit.hash)
+
+      if (commit.tree) includeTree(commit.tree)
+      for (const parentHash of commit.parent ?? []) {
+        stack.push(parentHash)
+      }
+    }
+
+    // Keep tags that point to included objects
+    for (const obj of objects) {
+      if (obj.type === 'tag') {
+        const tagObj = obj as TagObject
+        if (included.has(tagObj.objectHash)) {
+          included.add(tagObj.hash)
+        }
+      }
+    }
+
+    return objects.filter((o) => included.has(o.hash))
+  }, [objects, branches, selectedBranch])
+
   const filteredObjects = useMemo(() => {
-    return objects.filter((obj) => visibleTypes.includes(obj.type))
-  }, [objects, visibleTypes])
+    return branchScopedObjects.filter((obj) => visibleTypes.includes(obj.type))
+  }, [branchScopedObjects, visibleTypes])
 
   // derived paginated list for the sidebar
   const visibleListObjects = useMemo(() => {
