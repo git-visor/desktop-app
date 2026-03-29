@@ -71,10 +71,15 @@ jobs:
         if: matrix.os == 'macos-latest'
         run: |
           # Attach the .dmg file
-          hdiutil attach dist/*.dmg
+          DMG_PATH=$(find dist -name "*.dmg")
+          hdiutil attach "$DMG_PATH"
+          
+          # Debug: List contents of the mounted volume
+          VOLUME_PATH=$(ls /Volumes | grep "GitVisor")
+          ls -al "/Volumes/$VOLUME_PATH/"
           
           # Copy the app to Applications folder
-          cp -R /Volumes/Git\ Visor/Git\ Visor.app /Applications/
+          cp -R "/Volumes/$VOLUME_PATH/Git Visor.app" /Applications/
           
           # Open the app to verify it launches
           open /Applications/Git\ Visor.app
@@ -86,7 +91,7 @@ jobs:
           pgrep -f "Git Visor" || (echo "App failed to launch" && exit 1)
           
           # Detach the .dmg
-          hdiutil detach /Volumes/Git\ Visor
+          hdiutil detach "/Volumes/$VOLUME_PATH"
 
       # Upload the built artifacts (exe, dmg, AppImage) to the GitHub Action Run page
       - name: Upload Artifacts
