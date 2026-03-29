@@ -79,16 +79,16 @@ jobs:
           ls -al "/Volumes/$VOLUME_PATH/"
           
           # Copy the app to Applications folder
-          cp -R "/Volumes/$VOLUME_PATH/Git Visor.app" /Applications/
+          cp -R "/Volumes/$VOLUME_PATH/GitVisor.app" /Applications/
           
           # Open the app to verify it launches
-          open /Applications/Git\ Visor.app
+          open /Applications/GitVisor.app
           
           # Wait for a few seconds to ensure it runs
           sleep 10
           
           # Check if the app is running
-          pgrep -f "Git Visor" || (echo "App failed to launch" && exit 1)
+          pgrep -f "GitVisor" || (echo "App failed to launch" && exit 1)
           
           # Detach the .dmg
           hdiutil detach "/Volumes/$VOLUME_PATH"
