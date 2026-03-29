@@ -35,7 +35,12 @@ jobs:
   build-app:
     name: Build ${{ matrix.os }}
     needs: check
-    if: startsWith(github.ref, 'refs/tags/') # Only run if a tag was pushed in this event
+    if:  # Run if tagged commit or push to test-deployment branch
+      github.event_name == 'push' && (
+        startsWith(github.ref, 'refs/tags/v') ||
+        github.ref == 'refs/heads/test-deployment'
+      )
+
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
