@@ -49,6 +49,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Show OS Information
+        run: |
+          echo "Running build on OS: $RUNNER_OS"
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -60,12 +64,10 @@ jobs:
 
       - name: Build for Windows
         if: matrix.os == 'windows-latest'
-        run: systeminfo
         run: npm run build:win
 
       - name: Build for macOS
         if: matrix.os == 'macos-latest'
-        run: sw_vers
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
         run: npm run build:mac
