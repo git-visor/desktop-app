@@ -35,7 +35,12 @@ jobs:
   build-app:
     name: Build ${{ matrix.os }}
     needs: check
-    if: startsWith(github.ref, 'refs/tags/') # Only run if a tag was pushed in this event
+    if:  # Run if tagged commit or push to test-deployment branch
+      github.event_name == 'push' && (
+        startsWith(github.ref, 'refs/tags/v') ||
+        github.ref == 'refs/heads/test-deployment'
+      )
+
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -62,6 +67,31 @@ jobs:
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
         run: npm run build:mac
+      - name: Test .dmg Installation
+        if: matrix.os == 'macos-latest'
+        run: |
+          # Attach the .dmg file
+          DMG_PATH=$(find dist -name "*.dmg")
+          hdiutil attach "$DMG_PATH"
+          
+          # Debug: List contents of the mounted volume
+          VOLUME_PATH=$(ls /Volumes | grep "GitVisor")
+          ls -al "/Volumes/$VOLUME_PATH/"
+          
+          # Copy the app to Applications folder
+          cp -R "/Volumes/$VOLUME_PATH/GitVisor.app" /Applications/
+          
+          # Open the app to verify it launches
+          open /Applications/GitVisor.app
+          
+          # Wait for a few seconds to ensure it runs
+          sleep 10
+          
+          # Check if the app is running
+          pgrep -f "GitVisor" || (echo "App failed to launch" && exit 1)
+          
+          # Detach the .dmg
+          hdiutil detach "/Volumes/$VOLUME_PATH"
 
       # Upload the built artifacts (exe, dmg, AppImage) to the GitHub Action Run page
       - name: Upload Artifacts
