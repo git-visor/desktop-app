@@ -47,7 +47,7 @@ appImage:
 npmRebuild: false
 publish:
   provider: github
-  owner: thegrimbee
-  url: https://github.com/git-visor/desktop-app/releases/latest
+  owner: git-visor
+  repo: desktop-app
 electronDownload:
   mirror: https://npmmirror.com/mirrors/electron/

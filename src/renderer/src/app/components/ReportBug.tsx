@@ -27,7 +27,7 @@ export function ReportBug(): React.JSX.Element {
         <a
           href={ISSUE_URL}
           target="_blank"
-          rel="noreferrer"
+          rel="noreferrer noopener"
           className="inline-flex items-center gap-2 rounded-md bg-red-600 hover:bg-red-500 text-white px-4 py-2 text-sm font-medium transition-colors"
         >
           Open GitHub Issue
