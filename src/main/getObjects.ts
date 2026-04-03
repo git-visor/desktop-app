@@ -140,14 +140,15 @@ export function registerGetObjectsHandler(): void {
 
         try {
           if (type === 'blob') {
-            const { stdout } = await execAsync('git', ['cat-file', '-p', hash], {
-              cwd: repoPath,
-              maxBuffer: 20 * 1024 * 1024
-            })
-
-            parsedContent = {
-              names: [],
-              content: size < 10000 ? stdout : '(Binary or too large)'
+            parsedContent = { names: [] }
+            if (size >= 10000) {
+              parsedContent.content = '(Binary or too large)'
+            } else {
+              const { stdout } = await execAsync('git', ['cat-file', '-p', hash], {
+                cwd: repoPath,
+                maxBuffer: 2 * 1024 * 1024
+              })
+              parsedContent.content = stdout
             }
           } else if (type === 'tree') {
             // Format: <mode> <type> <hash>\t<name>
