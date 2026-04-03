@@ -5,6 +5,15 @@ import { parseCommitContent } from './parser'
 
 const execAsync = promisify(execFile)
 
+function isMaxBufferExceeded(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false
+  const e = error as { code?: string; message?: string }
+  return (
+    e.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER' ||
+    /maxBuffer|stdout maxBuffer|stderr maxBuffer/i.test(e.message ?? '')
+  )
+}
+
 export function registerGetObjectsHandler(): void {
   ipcMain.handle('git:get-objects', async (_event, repoPath: string) => {
     const rootFolderName = repoPath.split(/[\\/]/).pop() || 'repository'
@@ -75,8 +84,10 @@ export function registerGetObjectsHandler(): void {
         }
       }
     } catch (error) {
+      if (isMaxBufferExceeded(error)) {
+        throw new Error('Repository is too large to load with current buffer limits.')
+      }
       console.warn('Failed to load commit diffs via git cli:', error)
-      // Continue without diffs if git command fails (e.g. empty repo)
     }
     const resultObjects: {
       hash: string
@@ -245,6 +256,9 @@ export function registerGetObjectsHandler(): void {
       console.log(resultObjects)
       return resultObjects
     } catch (error) {
+      if (isMaxBufferExceeded(error)) {
+        throw new Error('Repository is too large to load with current buffer limits.')
+      }
       console.error('Error scanning Git objects:', error)
       return []
     }

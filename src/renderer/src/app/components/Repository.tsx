@@ -130,7 +130,6 @@ export function Repository(): React.JSX.Element {
         dispatch(setObjects(gitObjects))
         dispatch(setHeadPointer(head))
         toast.success('Repository refreshed', { id: toastId })
-        
         // Show success state on the button
         setShowSuccess(true)
         setTimeout(() => setShowSuccess(false), 3000)
@@ -139,7 +138,11 @@ export function Repository(): React.JSX.Element {
       }
     } catch (error) {
       console.error('Refresh error:', error)
-      toast.error('Error refreshing repository', { id: toastId })
+      const message =
+        error instanceof Error && /too large|buffer/i.test(error.message)
+        ? error.message
+        : 'Error refreshing repository'
+      toast.error(message, { id: toastId })
     } finally {
       dispatch(setIsRefreshing(false))
     }
@@ -188,7 +191,9 @@ export function Repository(): React.JSX.Element {
       console.error(err)
       // 4. Handle Missing .git Error
       // The Main process throws "No .git/objects found" which we catch here
-      if (err instanceof Error && err.message.includes('No .git')) {
+      if (err instanceof Error && /too large|buffer/i.test(err.message)) {
+        setError(err.message)
+      } else if (err instanceof Error && err.message.includes('No .git')) {
         setError('The selected folder is not a valid git repository (missing .git folder)')
       } else {
         setError('Failed to load repository. Ensure you have read permissions.')
