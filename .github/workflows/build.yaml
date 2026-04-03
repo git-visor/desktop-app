@@ -5,6 +5,7 @@ on:
     branches: [ main, master ]
     tags:
       - 'v*' # Trigger on version tags (e.g., v1.0.0)
+      - 'test-deployment*'
   pull_request:
     branches: [ main, master ]
 
@@ -38,6 +39,7 @@ jobs:
     if:  # Run if tagged commit or push to test-deployment branch
       github.event_name == 'push' && (
         startsWith(github.ref, 'refs/tags/v') ||
+        startsWith(github.ref, 'refs/tags/test-deployment') ||
         github.ref == 'refs/heads/test-deployment'
       )
 
@@ -60,13 +62,13 @@ jobs:
 
       - name: Build for Windows
         if: matrix.os == 'windows-latest'
-        run: npm run build:win
+        run: npm run build:win -- --publish never
 
       - name: Build for macOS
         if: matrix.os == 'macos-latest'
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
-        run: npm run build:mac
+        run: npm run build:mac -- --publish never
       - name: Test .dmg Installation
         if: matrix.os == 'macos-latest'
         run: |
@@ -100,6 +102,7 @@ jobs:
           name: ${{ matrix.os }}-artifacts
           path: |
             dist/*.exe
+            dist/*.zip
             dist/*.dmg
             dist/*.AppImage
             dist/*.deb
