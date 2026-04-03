@@ -1,20 +1,18 @@
 import { ipcMain } from 'electron'
-import { join } from 'path'
-import * as fs from 'fs'
 import { execFile } from 'child_process'
 import { promisify } from 'util'
-import { parseTreeBuffer, parseCommitContent } from './parser'
-import * as zlib from 'zlib'
+import { parseCommitContent } from './parser'
 
 const execAsync = promisify(execFile)
 
 export function registerGetObjectsHandler(): void {
   ipcMain.handle('git:get-objects', async (_event, repoPath: string) => {
-    const objectsPath = join(repoPath, '.git', 'objects')
-    const tagsPath = join(repoPath, '.git', 'refs', 'tags')
     const rootFolderName = repoPath.split(/[\\/]/).pop() || 'repository'
     // map to store diffs for commits: commitHash -> FileChange[]
-    const commitDiffMap = new Map<string, { status: string; path: string; hash: string; content: string }[]>()
+    const commitDiffMap = new Map<
+      string,
+      { status: string; path: string; hash: string; content: string }[]
+    >()
 
     // const diffContentPromises: Promise<void>[] = []
     // const diffTasks: { commitHash: string; path: string; diffEntry: { content: string } }[] = []
@@ -80,10 +78,6 @@ export function registerGetObjectsHandler(): void {
       console.warn('Failed to load commit diffs via git cli:', error)
       // Continue without diffs if git command fails (e.g. empty repo)
     }
-    if (!fs.existsSync(objectsPath)) {
-      throw new Error('No .git/objects found')
-    }
-
     const resultObjects: {
       hash: string
       type: string
@@ -100,99 +94,115 @@ export function registerGetObjectsHandler(): void {
       diff?: { status: string; path: string; hash: string; content: string }[]
     }[] = []
 
-    // 1. Scan for loose object files (folders 00-ff)
-    // Note: This does not read packed objects (.git/objects/pack), wrapped in try-catch for safety
-    // TODO: In the future, implement reading from packfiles for a complete view of the repository objects
+    // 1. Discover objects via git plumbing (includes loose objects, packs, and alternates)
     try {
-      // Read tags
-      if (fs.existsSync(tagsPath)) {
-        const tagFiles = await fs.promises.readdir(tagsPath)
-        for (const file of tagFiles) {
-          const filePath = join(tagsPath, file)
-          try {
-            const content = await fs.promises.readFile(filePath, 'utf8')
-            const object = content.trim()
-            resultObjects.push({
-              hash: file,
-              type: 'tag',
-              size: 0,
-              objectHash: object,
-              references: [object],
-              referencedBy: []
+      const { stdout: allObjectsStdout } = await execAsync(
+        'git',
+        [
+          'cat-file',
+          '--batch-all-objects',
+          '--batch-check=%(objectname) %(objecttype) %(objectsize)',
+          '--unordered'
+        ],
+        { cwd: repoPath, maxBuffer: 100 * 1024 * 1024 }
+      )
+
+      const objectMetaLines = allObjectsStdout
+        .split('\n')
+        .map((line) => line.trim())
+        .filter(Boolean)
+
+      for (const line of objectMetaLines) {
+        const [hash, type, sizeStr] = line.split(' ')
+        const size = Number(sizeStr)
+        if (!hash || !type || !Number.isFinite(size)) continue
+
+        let parsedContent: {
+          names?: string[]
+          content?: string
+          entries?: { mode: string; name: string; hash: string; type: string }[]
+          tree?: string
+          parent?: string[]
+          objectHash?: string
+        } = {}
+        let references: string[] = []
+
+        try {
+          if (type === 'blob') {
+            const { stdout } = await execAsync('git', ['cat-file', '-p', hash], {
+              cwd: repoPath,
+              maxBuffer: 20 * 1024 * 1024
             })
-          } catch (err) {
-            console.warn(`Failed to read tag file ${file}`, err)
-          }
-        }
-      }
-      // Read objects
-      const objectDirs = await fs.promises.readdir(objectsPath)
 
-      for (const dir of objectDirs) {
-        if (dir.length !== 2 || dir === 'in' || dir === 'pa') continue // skip info/pack folders TODO: read packed objects later
+            parsedContent = {
+              names: [],
+              content: size < 10000 ? stdout : '(Binary or too large)'
+            }
+          } else if (type === 'tree') {
+            // Format: <mode> <type> <hash>\t<name>
+            const { stdout } = await execAsync('git', ['cat-file', '-p', hash], {
+              cwd: repoPath,
+              maxBuffer: 20 * 1024 * 1024
+            })
 
-        const dirPath = join(objectsPath, dir)
-        const files = await fs.promises.readdir(dirPath)
+            const entries = stdout
+              .split('\n')
+              .filter(Boolean)
+              .map((treeLine) => {
+                const match = treeLine.match(/^(\d+)\s+(blob|tree|commit)\s+([0-9a-f]{40})\t(.+)$/)
+                if (!match) return null
+                const [, mode, entryType, entryHash, name] = match
+                return {
+                  mode,
+                  name,
+                  hash: entryHash,
+                  type: entryType === 'tree' ? 'tree' : 'blob'
+                }
+              })
+              .filter(
+                (entry): entry is { mode: string; name: string; hash: string; type: string } =>
+                  Boolean(entry)
+              )
 
-        for (const file of files) {
-          const fullHash = dir + file
-          const filePath = join(dirPath, file)
+            parsedContent = { names: [], entries }
+            references = entries.map((entry) => entry.hash)
+          } else if (type === 'commit') {
+            const { stdout } = await execAsync('git', ['cat-file', '-p', hash], {
+              cwd: repoPath,
+              maxBuffer: 20 * 1024 * 1024
+            })
 
-          try {
-            const fileBuffer = await fs.promises.readFile(filePath)
-            const inflated = zlib.inflateSync(fileBuffer)
+            parsedContent = parseCommitContent(stdout)
+            if (parsedContent.tree) references.push(parsedContent.tree)
+            if (parsedContent.parent) references.push(...parsedContent.parent)
+          } else if (type === 'tag') {
+            const { stdout } = await execAsync('git', ['cat-file', '-p', hash], {
+              cwd: repoPath,
+              maxBuffer: 20 * 1024 * 1024
+            })
 
-            // Split header "type size\0" from content
-            const nullIndex = inflated.indexOf(0)
-            const header = inflated.subarray(0, nullIndex).toString('utf8')
-            const [type, sizeStr] = header.split(' ')
-            const size = parseInt(sizeStr)
-            const contentBuffer = inflated.subarray(nullIndex + 1)
-            let parsedContent: {
-              names?: string[]
-              content?: string
-              entries?: { mode: string; name: string; hash: string; type: string }[]
-              tree?: string
-              parent?: string[]
-              objectHash?: string
-            } = {}
-            let references: string[] = []
+            const objectLine = stdout.split('\n').find((value) => value.startsWith('object '))
+            const objectHash = objectLine?.split(' ')[1]
 
-            if (type === 'blob') {
-              // Start of file logic, limit size for UI performance
-              parsedContent = {
-                names: [],
-                content: size < 10000 ? contentBuffer.toString('utf8') : '(Binary or too large)'
-              }
-            } else if (type === 'tree') {
-              const entries = parseTreeBuffer(contentBuffer)
-              parsedContent = {
-                names: [],
-                entries: entries
-              }
-              references = entries.map((e) => e.hash)
-            } else if (type === 'commit') {
-              parsedContent = parseCommitContent(contentBuffer.toString('utf8'))
-              if (parsedContent.tree) references.push(parsedContent.tree)
-              if (parsedContent.parent) references.push(...parsedContent.parent)
-            } else if (type === 'tag') {
-              const objectHash = contentBuffer.toString('utf8').split('\n')[0].split(' ')[1]
+            if (objectHash) {
               parsedContent = { objectHash }
               references = [objectHash]
             }
-
-            resultObjects.push({
-              hash: fullHash,
-              type,
-              size,
-              references,
-              referencedBy: [], // Will fill later
-              ...parsedContent,
-              ...(type === 'commit' ? { diff: commitDiffMap.get(fullHash) || [] } : {})
-            })
-          } catch (err) {
-            console.warn(`Failed to parse object ${fullHash}`, err)
+          } else {
+            continue
           }
+
+          resultObjects.push({
+            hash,
+            type,
+            size,
+            references,
+            referencedBy: [], // Will fill later
+            ...parsedContent,
+            ...(type === 'commit' ? { diff: commitDiffMap.get(hash) || [] } : {})
+          })
+        } catch (err) {
+          console.warn(`Failed to parse object ${hash}`, err)
         }
       }
 
