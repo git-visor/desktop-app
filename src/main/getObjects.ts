@@ -253,7 +253,6 @@ export function registerGetObjectsHandler(): void {
           obj.names.push(rootFolderName)
         }
       })
-      console.log(resultObjects)
       return resultObjects
     } catch (error) {
       if (isMaxBufferExceeded(error)) {

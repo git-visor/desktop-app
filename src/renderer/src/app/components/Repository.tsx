@@ -154,7 +154,6 @@ export function Repository(): React.JSX.Element {
 
     // 1. Get the absolute path from the system dialog
     const path = await window.api.selectDirectory()
-    console.log('Selected path:', path)
     if (!path) return // User cancelled the dialog
 
     setIsLoading(true)
