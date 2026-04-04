@@ -1,9 +1,111 @@
 import { ipcMain } from 'electron'
-import { execFile } from 'child_process'
+import { execFile, spawn } from 'child_process'
 import { promisify } from 'util'
 import { parseAnnotatedTagContent, parseCommitContent, parseTreeBuffer } from './parser'
+import { once } from 'events'
 
 const execAsync = promisify(execFile)
+
+type BatchObjectRecord =
+  | {
+      hash: string
+      type: string
+      size: number
+      content: Buffer
+    }
+  | {
+      hash: string
+      missing: true
+    }
+
+function parseCatFileBatchOutput(buffer: Buffer): Map<string, BatchObjectRecord> {
+  const out = new Map<string, BatchObjectRecord>()
+  let cursor = 0
+
+  while (cursor < buffer.length) {
+    const headerEnd = buffer.indexOf(0x0a, cursor) // '\n'
+    if (headerEnd === -1) break
+
+    const header = buffer.subarray(cursor, headerEnd).toString('utf8')
+    cursor = headerEnd + 1
+
+    if (!header) continue
+
+    if (header.endsWith(' missing')) {
+      const [hash] = header.split(' ')
+      out.set(hash, { hash, missing: true })
+      continue
+    }
+
+    const [hash, type, sizeStr] = header.split(' ')
+    const size = Number(sizeStr)
+    if (!hash || !type || !Number.isFinite(size) || size < 0) {
+      throw new Error(`Invalid cat-file --batch header: ${header}`)
+    }
+
+    const end = cursor + size
+    if (end > buffer.length) {
+      throw new Error('Truncated cat-file --batch payload')
+    }
+
+    const content = buffer.subarray(cursor, end)
+    cursor = end
+
+    // Each payload is followed by one '\n'
+    if (cursor < buffer.length && buffer[cursor] === 0x0a) cursor += 1
+
+    out.set(hash, { hash, type, size, content })
+  }
+
+  return out
+}
+
+async function runCatFileBatch(
+  repoPath: string,
+  hashes: string[]
+): Promise<Map<string, BatchObjectRecord>> {
+  if (hashes.length === 0) return new Map()
+
+  const proc = spawn('git', ['cat-file', '--batch'], {
+    cwd: repoPath,
+    stdio: ['pipe', 'pipe', 'pipe']
+  })
+
+  const stdoutChunks: Buffer[] = []
+  const stderrChunks: Buffer[] = []
+  let totalStdout = 0
+  const maxStdoutBytes = 200 * 1024 * 1024 // safety cap
+
+  proc.stdout.on('data', (chunk: Buffer) => {
+    totalStdout += chunk.length
+    if (totalStdout > maxStdoutBytes) {
+      proc.kill()
+      return
+    }
+    stdoutChunks.push(chunk)
+  })
+
+  proc.stderr.on('data', (chunk: Buffer) => {
+    stderrChunks.push(chunk)
+  })
+
+  // Feed all requested hashes in one stream.
+  proc.stdin.write(hashes.join('\n') + '\n')
+  proc.stdin.end()
+
+  const [code] = (await once(proc, 'close')) as [number | null]
+
+  if (code !== 0) {
+    const stderr = Buffer.concat(stderrChunks).toString('utf8')
+    throw new Error(`git cat-file --batch failed (code ${code ?? 'null'}): ${stderr}`)
+  }
+
+  if (totalStdout > maxStdoutBytes) {
+    throw new Error('Repository is too large to load with current buffer limits.')
+  }
+
+  return parseCatFileBatchOutput(Buffer.concat(stdoutChunks))
+}
 
 function isMaxBufferExceeded(error: unknown): boolean {
   if (!error || typeof error !== 'object') return false
@@ -127,6 +229,23 @@ export function registerGetObjectsHandler(): void {
         .split('\n')
         .map((line) => line.trim())
         .filter(Boolean)
+      const batchHashes = objectMetaLines
+        .map((line) => {
+          const [hash, type, sizeStr] = line.split(' ')
+          const size = Number(sizeStr)
+          if (!hash || !type || !Number.isFinite(size)) return null
+
+          // Skip large blobs in initial load (same behavior as current code).
+          if (type === 'blob' && size >= 10000) return null
+
+          if (type === 'blob' || type === 'tree' || type === 'commit' || type === 'tag') {
+            return hash
+          }
+          return null
+        })
+        .filter((h): h is string => Boolean(h))
+
+      const batchMap = await runCatFileBatch(repoPath, batchHashes)
 
       for (const line of objectMetaLines) {
         const [hash, type, sizeStr] = line.split(' ')
@@ -149,36 +268,26 @@ export function registerGetObjectsHandler(): void {
             if (size >= 10000) {
               parsedContent.content = '(Binary or too large)'
             } else {
-              const { stdout } = await execAsync('git', ['cat-file', '-p', hash], {
-                cwd: repoPath,
-                maxBuffer: 2 * 1024 * 1024
-              })
-              parsedContent.content = stdout
+              const batchEntry = batchMap.get(hash)
+              if (!batchEntry || 'missing' in batchEntry) continue
+              parsedContent.content = batchEntry.content.toString('utf8')
             }
           } else if (type === 'tree') {
-            const { stdout } = (await execAsync('git', ['cat-file', 'tree', hash], {
-              cwd: repoPath,
-              maxBuffer: 20 * 1024 * 1024,
-              encoding: 'buffer'
-            })) as { stdout: Buffer; stderr: Buffer }
-            const entries = parseTreeBuffer(stdout)
+            const batchEntry = batchMap.get(hash)
+            if (!batchEntry || 'missing' in batchEntry) continue
+            const entries = parseTreeBuffer(batchEntry.content)
             parsedContent = { names: [], entries }
             references = entries.map((entry) => entry.hash)
           } else if (type === 'commit') {
-            const { stdout } = await execAsync('git', ['cat-file', '-p', hash], {
-              cwd: repoPath,
-              maxBuffer: 20 * 1024 * 1024
-            })
-
-            parsedContent = parseCommitContent(stdout)
+            const batchEntry = batchMap.get(hash)
+            if (!batchEntry || 'missing' in batchEntry) continue
+            parsedContent = parseCommitContent(batchEntry.content.toString('utf8'))
             if (parsedContent.tree) references.push(parsedContent.tree)
             if (parsedContent.parent) references.push(...parsedContent.parent)
-          } else if (type === 'tag') { // annotated tags
-            const { stdout } = await execAsync('git', ['cat-file', '-p', hash], {
-              cwd: repoPath,
-              maxBuffer: 20 * 1024 * 1024
-            })
-            parsedContent = parseAnnotatedTagContent(stdout)
+          } else if (type === 'tag') {
+            const batchEntry = batchMap.get(hash)
+            if (!batchEntry || 'missing' in batchEntry) continue
+            parsedContent = parseAnnotatedTagContent(batchEntry.content.toString('utf8'))
             if (parsedContent.objectHash) references.push(parsedContent.objectHash)
           } else {
             continue
@@ -197,7 +306,7 @@ export function registerGetObjectsHandler(): void {
           console.warn(`Failed to parse object ${hash}`, err)
         }
       }
-      
+
       // Handling lightweight tags
       try {
         const { stdout: tagRefsStdout } = await execAsync(
