@@ -268,7 +268,7 @@ export function Repository(): React.JSX.Element {
   }
 
   return (
-    <div className="h-full flex flex-col bg-[#1e1e1e] p-6">
+    <div className="h-full flex flex-col bg-[#1e1e1e] p-6 relative">
       <div className="mb-8">
         <div className="flex items-center justify-between">
           <div>
@@ -284,7 +284,7 @@ export function Repository(): React.JSX.Element {
           <div className="flex gap-2">
             <button
               onClick={handleExportJson}
-              disabled={isExporting}
+              disabled={isExporting || isLoading}
               className="flex items-center gap-2 px-4 py-2 bg-blue-600/10 hover:bg-blue-600/20 text-blue-400 border border-blue-600/30 rounded font-medium text-sm transition-all shadow-sm"
             >
               {isExporting ? (
@@ -296,7 +296,7 @@ export function Repository(): React.JSX.Element {
             </button>
             <button
               onClick={handleRefresh}
-              disabled={isRefreshing}
+              disabled={isRefreshing || isLoading}
               className={`
               flex items-center gap-2 px-4 py-2 rounded font-medium text-sm transition-all shadow-sm
               ${
@@ -321,10 +321,14 @@ export function Repository(): React.JSX.Element {
             <button
               onClick={handleSelectDirectory}
               disabled={isLoading}
-              className="px-6 py-2 bg-[#2d2d2d] hover:bg-[#3d3d3d] text-white rounded font-medium transition-colors flex items-center gap-2 border border-gray-700"
+              className="px-6 py-2 bg-[#2d2d2d] hover:bg-[#3d3d3d] disabled:opacity-60 text-white rounded font-medium transition-colors flex items-center gap-2 border border-gray-700"
             >
-              <HardDrive className="w-4 h-4" />
-              Switch Repo
+              {isLoading ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                <HardDrive className="w-4 h-4" />
+              )}
+            {isLoading ? 'Switching...' : 'Switch Repo'}
             </button>
           </div>
         </div>
@@ -375,6 +379,14 @@ export function Repository(): React.JSX.Element {
           </p>
         </div>
       </div>
+      {isLoading && (
+        <div className="absolute inset-0 bg-black/30 backdrop-blur-[1px] flex items-center justify-center z-10">
+        <div className="flex items-center gap-2 px-4 py-2 rounded bg-[#252526] border border-gray-700 text-gray-200 text-sm">
+          <Loader2 className="w-4 h-4 animate-spin" />
+            Loading repository...
+          </div>
+        </div>
+      )}
     </div>
   )
 }
