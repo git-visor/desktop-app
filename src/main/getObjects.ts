@@ -75,13 +75,18 @@ async function runCatFileBatch(
   const stderrChunks: Buffer[] = []
   let totalStdout = 0
   const maxStdoutBytes = 200 * 1024 * 1024 // safety cap
+  let exceededLimit = false
 
   proc.stdout.on('data', (chunk: Buffer) => {
+    if (exceededLimit) return
+
     totalStdout += chunk.length
     if (totalStdout > maxStdoutBytes) {
+      exceededLimit = true
       proc.kill()
       return
     }
+
     stdoutChunks.push(chunk)
   })
 
@@ -89,19 +94,22 @@ async function runCatFileBatch(
     stderrChunks.push(chunk)
   })
 
-  // Feed all requested hashes in one stream.
   proc.stdin.write(hashes.join('\n') + '\n')
   proc.stdin.end()
 
-  const [code] = (await once(proc, 'close')) as [number | null]
+  const [code, signal] = (await once(proc, 'close')) as [number | null, NodeJS.Signals | null]
 
-  if (code !== 0) {
-    const stderr = Buffer.concat(stderrChunks).toString('utf8')
-    throw new Error(`git cat-file --batch failed (code ${code ?? 'null'}): ${stderr}`)
+  // Prioritize actionable error for renderer/user.
+  if (exceededLimit) {
+    throw new Error('Repository is too large to load with current buffer limits.')
   }
 
-  if (totalStdout > maxStdoutBytes) {
-    throw new Error('Repository is too large to load with current buffer limits.')
+  if (code !== 0) {
+    const stderr = Buffer.concat(stderrChunks).toString('utf8').trim()
+    const signalText = signal ? `, signal ${signal}` : ''
+    throw new Error(
+      `git cat-file --batch failed (code ${code ?? 'null'}${signalText})${stderr ? `: ${stderr}` : ''}`
+    )
   }
 
   return parseCatFileBatchOutput(Buffer.concat(stdoutChunks))
