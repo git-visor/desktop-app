@@ -60,21 +60,61 @@ export function ObjectGraph({
     tag: new Path2D("M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.828 8.828a2 2 0 0 0 2.828 0l7.172-7.172a2 2 0 0 0 0-2.828z M7.5 7.5h.01")
   }), [])
 
-  // 1. Calculate Initial Layout TODO: Handle merges somehow
+  // 1. Calculate Initial Layout
   const defaultPositions = useMemo(() => {
     const positionMap = new Map<string, NodePosition>()
     const objectMap = new Map(objects.map((o) => [o.hash, o]))
     const rowToY = (row: number): number => row * ROW_HEIGHT + NODE_TO_LABELS_GAP
 
-    const commits = objects
+    const commitNodes = objects
       .filter((o) => o.type === 'commit')
       .map((o) => o as CommitObject)
-      .sort((a, b) => {
-        const at = Number(a.timestamp ?? 0)
-        const bt = Number(b.timestamp ?? 0)
-        if (at !== bt) return at - bt
-        return a.hash.localeCompare(b.hash)
-      })
+
+    const commitByHash = new Map(commitNodes.map((c) => [c.hash, c]))
+    const childCount = new Map<string, number>(commitNodes.map((c) => [c.hash, 0]))
+    for (const c of commitNodes) {
+      for (const p of c.parent ?? []) {
+        if (childCount.has(p)) {
+          childCount.set(p, (childCount.get(p) ?? 0) + 1)
+        }
+      }
+    }
+    const compareCommits = (a: CommitObject, b: CommitObject): number => {
+      const ta = Number(a.timestamp ?? 0)
+      const tb = Number(b.timestamp ?? 0)
+      if (ta !== tb) return tb - ta
+      return a.hash.localeCompare(b.hash)
+    }
+    // technically no need to stable sort since current branch handling ensures the commit history is linear, but just be safe
+    const enqueueSorted = (arr: CommitObject[], item: CommitObject): void => {
+      let i = 0
+      while (i < arr.length && compareCommits(arr[i], item) <= 0) i++
+      arr.splice(i, 0, item)
+    }
+    const queue = commitNodes.filter((c) => (childCount.get(c.hash) ?? 0) === 0)
+    const commits: CommitObject[] = []
+    const seen = new Set<string>()
+    let queueIndex = 0
+    while (queueIndex < queue.length) {
+      const current = queue[queueIndex++]!
+      if (seen.has(current.hash)) continue
+      seen.add(current.hash)
+      commits.push(current)
+
+      for (const p of current.parent ?? []) {
+        if (!childCount.has(p)) continue
+        const nextCount = (childCount.get(p) ?? 0) - 1
+        childCount.set(p, nextCount)
+        if (nextCount === 0) {
+          const parentCommit = commitByHash.get(p)
+          if (parentCommit) enqueueSorted(queue, parentCommit)
+        }
+      }
+    }
+
+    // fallback in case of disconnected/corrupt commit links
+    const remaining = commitNodes.filter((c) => !seen.has(c.hash)).sort(compareCommits)
+    for (const c of remaining) commits.push(c)
 
     const treeReachableCache = new Map<string, Set<string>>()
     const getReachableFromTree = (rootTreeHash: string): Set<string> => {
