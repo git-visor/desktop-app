@@ -66,15 +66,47 @@ export function ObjectGraph({
     const objectMap = new Map(objects.map((o) => [o.hash, o]))
     const rowToY = (row: number): number => row * ROW_HEIGHT + NODE_TO_LABELS_GAP
 
-    const commits = objects
+    const commitNodes = objects
       .filter((o) => o.type === 'commit')
       .map((o) => o as CommitObject)
-      .sort((a, b) => {
-        const at = Number(a.timestamp ?? 0)
-        const bt = Number(b.timestamp ?? 0)
-        if (at !== bt) return at - bt
-        return a.hash.localeCompare(b.hash)
-      })
+
+    const commitByHash = new Map(commitNodes.map((c) => [c.hash, c]))
+    const childCount = new Map<string, number>(commitNodes.map((c) => [c.hash, 0]))
+    for (const c of commitNodes) {
+      for (const p of c.parent ?? []) {
+        if (childCount.has(p)) {
+          childCount.set(p, (childCount.get(p) ?? 0) + 1)
+        }
+      }
+    }
+    const queue = commitNodes
+      .filter((c) => (childCount.get(c.hash) ?? 0) === 0)
+      .sort((a, b) => Number(b.timestamp ?? 0) - Number(a.timestamp ?? 0))
+
+    const commits: CommitObject[] = []
+    const seen = new Set<string>()
+
+    while (queue.length > 0) {
+      const current = queue.shift()!
+      if (seen.has(current.hash)) continue
+      seen.add(current.hash)
+      commits.push(current)
+
+      for (const p of current.parent ?? []) {
+        if (!childCount.has(p)) continue
+        const nextCount = (childCount.get(p) ?? 0) - 1
+        childCount.set(p, nextCount)
+        if (nextCount === 0) {
+          const parentCommit = commitByHash.get(p)
+          if (parentCommit) queue.push(parentCommit)
+        }
+      }
+    }
+
+    // fallback in case of disconnected/corrupt commit links
+    for (const c of commitNodes) {
+      if (!seen.has(c.hash)) commits.push(c)
+    }
 
     const treeReachableCache = new Map<string, Set<string>>()
     const getReachableFromTree = (rootTreeHash: string): Set<string> => {
