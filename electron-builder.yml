@@ -12,7 +12,7 @@ files:
 asarUnpack:
   - resources/**
 win:
-  executableName: GitVisor
+  executableName: Git Visor
   icon: resources/GitVisor-simple-transparent-bg-lg.ico
   target:
     - target: nsis
@@ -32,7 +32,7 @@ mac:
   entitlementsInherit: null
   gatekeeperAssess: false
   notarize: false
-  executableName: GitVisor
+  executableName: Git Visor
 dmg:
   artifactName: ${name}-${version}.${ext}
 linux:
