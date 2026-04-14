@@ -123,13 +123,15 @@ export function Repository(): React.JSX.Element {
     const toastId = toast.loading('Refreshing repository...')
 
     try {
-      // Re-fetch objects and head
+      // Re-fetch objects, head, and branches to keep branch-scoped graph in sync
       const gitObjects = await window.api.getGitObjects(repoPath)
       const head = await window.api.getGitHead(repoPath)
+      const refreshedBranches = await window.api.getGitBranches(repoPath)
 
       if (gitObjects) {
         dispatch(setObjects(gitObjects))
         dispatch(setHeadPointer(head))
+        dispatch(setBranches(refreshedBranches))
         toast.success('Repository refreshed', { id: toastId })
         // Show success state on the button
         setShowSuccess(true)
