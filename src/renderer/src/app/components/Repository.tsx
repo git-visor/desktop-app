@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useAppDispatch, useAppSelector } from '@renderer/app/store/hooks'
 import { setBranches, updateCommitDiffContent } from '@renderer/app/store/slices/gitSlice'
-import { CommitObject } from '@renderer/app/components/ObjectTypes'
+import { CommitObject, TagObject } from '@renderer/app/components/ObjectTypes'
 import {
   setRepository,
   closeRepository,
@@ -123,13 +123,17 @@ export function Repository(): React.JSX.Element {
     const toastId = toast.loading('Refreshing repository...')
 
     try {
-      // Re-fetch objects and head
-      const gitObjects = await window.api.getGitObjects(repoPath)
-      const head = await window.api.getGitHead(repoPath)
+      // Re-fetch objects, head, and branches to keep branch-scoped graph in sync
+      const [gitObjects, head, refreshedBranches] = await Promise.all([
+        window.api.getGitObjects(repoPath),
+        window.api.getGitHead(repoPath),
+        window.api.getGitBranches(repoPath)
+      ])
 
       if (gitObjects) {
         dispatch(setObjects(gitObjects))
         dispatch(setHeadPointer(head))
+        dispatch(setBranches(refreshedBranches))
         toast.success('Repository refreshed', { id: toastId })
         // Show success state on the button
         setShowSuccess(true)
@@ -141,8 +145,8 @@ export function Repository(): React.JSX.Element {
       console.error('Refresh error:', error)
       const message =
         error instanceof Error && /too large|buffer/i.test(error.message)
-        ? error.message
-        : 'Error refreshing repository'
+          ? error.message
+          : 'Error refreshing repository'
       toast.error(message, { id: toastId })
     } finally {
       dispatch(setIsRefreshing(false))
@@ -203,7 +207,63 @@ export function Repository(): React.JSX.Element {
     }
   }
 
-  const commitCount = objects.filter((o) => o.type === 'commit').length
+  const commitStats = useMemo(() => {
+    const allCommits = objects.filter((o) => o.type === 'commit') as CommitObject[]
+    const objectMap = new Map(objects.map((obj) => [obj.hash, obj]))
+    const reachableCommits = new Set<string>()
+    const stack: string[] = []
+
+    for (const branch of branches) {
+      if (branch.commitHash) {
+        stack.push(branch.commitHash)
+      }
+    }
+
+    for (const obj of objects) {
+      if (obj.type !== 'tag') continue
+
+      let currentHash = (obj as TagObject).objectHash
+      const seen = new Set<string>()
+
+      // Follow nested tags until we hit the underlying object.
+      while (currentHash && !seen.has(currentHash)) {
+        seen.add(currentHash)
+        const target = objectMap.get(currentHash)
+
+        if (!target) break
+        if (target.type === 'commit') {
+          stack.push(target.hash)
+          break
+        }
+        if (target.type === 'tag') {
+          currentHash = (target as TagObject).objectHash
+          continue
+        }
+
+        break
+      }
+    }
+
+    while (stack.length > 0) {
+      const hash = stack.pop()
+      if (!hash || reachableCommits.has(hash)) continue
+
+      const obj = objectMap.get(hash)
+      if (!obj || obj.type !== 'commit') continue
+
+      const commit = obj as CommitObject
+      reachableCommits.add(commit.hash)
+      for (const parentHash of commit.parent ?? []) {
+        stack.push(parentHash)
+      }
+    }
+
+    const total = allCommits.length
+    const reachable = reachableCommits.size
+    const dangling = Math.max(total - reachable, 0)
+
+    return { total, reachable, dangling }
+  }, [objects, branches])
 
   const lastCommit = objects
     .filter((o) => o.type === 'commit')
@@ -344,19 +404,8 @@ export function Repository(): React.JSX.Element {
             </div>
             <span className="text-gray-400 text-sm">Total Commits</span>
           </div>
-          <p className="text-2xl font-bold text-white pl-1">{commitCount}</p>
+          <p className="text-2xl font-bold text-white pl-1">{commitStats.reachable}</p>
         </div>
-
-        {/* <div className="bg-[#252526] p-4 rounded border border-gray-700">
-          <div className="flex items-center gap-3 mb-2">
-            <div className="p-2 bg-purple-500/10 rounded">
-              <GitBranch className="w-5 h-5 text-purple-400" />
-            </div>
-            <span className="text-gray-400 text-sm">Branches</span>
-          </div>
-          <p className="text-2xl font-bold text-white pl-1">3</p>
-        </div> */}
-
         <div className="bg-[#252526] p-4 rounded border border-gray-700">
           <div className="flex items-center gap-3 mb-2">
             <div className="p-2 bg-orange-500/10 rounded">
