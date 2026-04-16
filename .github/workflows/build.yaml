@@ -119,9 +119,11 @@ jobs:
             throw "No NSIS installer found in dist/"
           }
 
-          # Force deterministic install location (no spaces; /D must be last)
+          # Force deterministic install location (/D should be the last installer arg)
           $installDir = Join-Path $env:RUNNER_TEMP "GitVisorInstall"
-          if (Test-Path $installDir) { Remove-Item -Recurse -Force $installDir }
+          if (Test-Path $installDir) {
+            Remove-Item -Recurse -Force $installDir
+          }
 
           Write-Host "Installing from: $($installer.FullName)"
           Write-Host "Install dir: $installDir"
@@ -132,7 +134,7 @@ jobs:
             throw "Installer finished but install dir was not created: $installDir"
           }
 
-          # Find the installed app exe (ignore uninstaller)
+          # Find installed app executable (ignore uninstaller)
           $appExe = Get-ChildItem -Path $installDir -Recurse -Filter "*.exe" |
             Where-Object { $_.Name -notmatch "^Uninstall" } |
             Select-Object -First 1
@@ -152,7 +154,8 @@ jobs:
 
           Stop-Process -Id $proc.Id -Force
 
-          # Optional cleanup
+          # Optional cleanup via uninstaller
           $uninstaller = Get-ChildItem -Path $installDir -Filter "Uninstall*.exe" -Recurse | Select-Object -First 1
           if ($uninstaller) {
-            Start-Process -FilePath 
+            Start-Process -FilePath $uninstaller.FullName -ArgumentList "/S" -Wait
+          }
