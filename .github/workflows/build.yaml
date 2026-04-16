@@ -119,22 +119,40 @@ jobs:
             throw "No NSIS installer found in dist/"
           }
 
-          Write-Host "Installing from: $($installer.FullName)"
-          # NSIS silent install
-          Start-Process -FilePath $installer.FullName -ArgumentList "/S" -Wait
+          # Force deterministic install location (no spaces; /D must be last)
+          $installDir = Join-Path $env:RUNNER_TEMP "GitVisorInstall"
+          if (Test-Path $installDir) { Remove-Item -Recurse -Force $installDir }
 
-          # Default electron-builder NSIS install path for your productName
-          $installedExe = Join-Path $env:LOCALAPPDATA "Programs\Git Visor\Git Visor.exe"
-          if (-not (Test-Path $installedExe)) {
-            throw "Installed app not found at: $installedExe"
+          Write-Host "Installing from: $($installer.FullName)"
+          Write-Host "Install dir: $installDir"
+
+          Start-Process -FilePath $installer.FullName -ArgumentList "/S", "/D=$installDir" -Wait
+
+          if (-not (Test-Path $installDir)) {
+            throw "Installer finished but install dir was not created: $installDir"
           }
 
-          Write-Host "Launching installed app: $installedExe"
-          $proc = Start-Process -FilePath $installedExe -PassThru
+          # Find the installed app exe (ignore uninstaller)
+          $appExe = Get-ChildItem -Path $installDir -Recurse -Filter "*.exe" |
+            Where-Object { $_.Name -notmatch "^Uninstall" } |
+            Select-Object -First 1
+
+          if (-not $appExe) {
+            Get-ChildItem -Path $installDir -Recurse | Select-Object FullName
+            throw "No installed app executable found in $installDir"
+          }
+
+          Write-Host "Launching installed app: $($appExe.FullName)"
+          $proc = Start-Process -FilePath $appExe.FullName -PassThru
           Start-Sleep -Seconds 10
 
           if ($proc.HasExited) {
-            throw "Installed app exited too early"
+            throw "Installed app exited too early with code $($proc.ExitCode)"
           }
 
           Stop-Process -Id $proc.Id -Force
+
+          # Optional cleanup
+          $uninstaller = Get-ChildItem -Path $installDir -Filter "Uninstall*.exe" -Recurse | Select-Object -First 1
+          if ($uninstaller) {
+            Start-Process -FilePath 
