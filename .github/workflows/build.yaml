@@ -153,9 +153,3 @@ jobs:
           }
 
           Stop-Process -Id $proc.Id -Force
-
-          # Optional cleanup via uninstaller
-          $uninstaller = Get-ChildItem -Path $installDir -Filter "Uninstall*.exe" -Recurse | Select-Object -First 1
-          if ($uninstaller) {
-            Start-Process -FilePath $uninstaller.FullName -ArgumentList "/S" -Wait
-          }
