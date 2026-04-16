@@ -12,7 +12,7 @@ on:
 jobs:
   # Job 1: Verify code quality
   check:
-    name: Lint & Typecheck
+    name: ESLint, Typecheck, and Tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -34,9 +34,16 @@ jobs:
 
       - name: Run unit tests
         run: npm run test
-        
+
+      - name: Install Linux GUI deps for Electron e2e
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb libgtk-3-0 libnss3 libxss1 libasound2t64 libgbm1
+
       - name: Run E2E tests
-        run: npm run test:e2e
+        run: xvfb-run -a npm run test:e2e
+        env:
+          CI: true
 
   # Job 2: Build Executables for all platforms
   build-app:
