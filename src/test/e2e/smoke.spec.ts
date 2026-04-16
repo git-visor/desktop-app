@@ -6,12 +6,13 @@ test('app window opens and shows main tabs', async () => {
     args: [path.join(process.cwd(), 'out/main/index.js')]
   })
 
-  const window = await electronApp.firstWindow()
-  await window.waitForLoadState('domcontentloaded')
-
-  await expect(window.getByRole('tab', { name: /^Repository$/ })).toBeVisible()
-  await expect(window.getByRole('tab', { name: /^Objects$/ })).toBeVisible()
-  await expect(window.getByRole('tab', { name: /^Report Bug$/ })).toBeVisible()
-
-  await electronApp.close()
+  try {
+    const window = await electronApp.firstWindow()
+    await window.waitForLoadState('domcontentloaded')
+    await expect(window.getByRole('tab', { name: /^Repository$/ })).toBeVisible()
+    await expect(window.getByRole('tab', { name: /^Objects$/ })).toBeVisible()
+    await expect(window.getByRole('tab', { name: /^Report Bug$/ })).toBeVisible()
+  } finally {
+    await electronApp.close()
+  }
 })
